@@ -19,12 +19,15 @@ const diskSize = 6 << 20
 
 func main() {
 	// MSC replaces the USB descriptor, so it must be set up before the host
-	// enumerates, see TinyGo src/machine/usb.go ConfigureUSBEndpoint.
+	// enumerates, see TinyGo src/machine/usb.go ConfigureUSBEndpoint. Mount
+	// first so a new volume is formatted before the host looks at it.
+	var vol *tinypod.Volume
 	disk, diskErr := flashdisk.Tail(machine.Flash, diskSize)
 	if diskErr == nil {
 		m := msc.Port(disk)
 		m.SetVendorID("TinyGo")
 		m.SetProductID("tinypod")
+		vol, diskErr = tinypod.MountFlash(disk)
 	}
 	machine.USBDev.Configure(machine.UARTConfig{})
 	time.Sleep(time.Second)
@@ -36,11 +39,7 @@ func main() {
 	tinypod.Message(&disp, theme, "tinypod", "starting")
 
 	if diskErr != nil {
-		tinypod.Fail(&disp, theme, "no flash disk", diskErr)
-	}
-	vol, err := tinypod.MountFlash(disk)
-	if err != nil {
-		tinypod.Fail(&disp, theme, "no FAT volume", err)
+		tinypod.Fail(&disp, theme, "no flash volume", diskErr)
 	}
 
 	enable := machine.SPEAKER_ENABLE

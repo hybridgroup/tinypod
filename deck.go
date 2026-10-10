@@ -17,6 +17,7 @@ type deck struct {
 	fs     *fat.FS
 	wake   chan struct{}
 	f      fat.File
+	ahead  ahead
 	cut    atomic.Bool
 
 	mu     sync.Mutex
@@ -94,7 +95,7 @@ func (d *deck) Read(b []byte) (int, error) {
 	if d.cut.Load() {
 		return 0, io.EOF
 	}
-	return d.f.Read(b)
+	return d.ahead.Read(b)
 }
 
 func (d *deck) run() {
@@ -116,9 +117,11 @@ func (d *deck) run() {
 		if err := d.fs.OpenFile(&d.f, song, fat.ModeRead); err != nil {
 			println("open", song, err.Error())
 		} else {
+			d.ahead.start(&d.f)
 			if err := d.player.Play(d); err != nil && !d.cut.Load() {
 				println("play", song, err.Error())
 			}
+			d.ahead.halt()
 			d.f.Close()
 		}
 

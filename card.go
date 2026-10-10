@@ -34,4 +34,3 @@ func mountCard(fs *fat.FS) error {
 	}
 	return fs.Mount(card, 512, fat.ModeRead)
 }
-

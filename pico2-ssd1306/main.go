@@ -36,7 +36,7 @@ func main() {
 	i2c.Configure(machine.I2CConfig{SDA: machine.GPIO6, SCL: machine.GPIO7, Frequency: 400 * machine.KHz})
 	disp := tinypod.NewSSD1306(i2c, 0x3C, 128, 64)
 	theme := tinypod.MonoTheme()
-	tinypod.Message(disp, theme, "tinypod", "starting")
+	tinypod.Splash(disp, theme)
 
 	if diskErr != nil {
 		tinypod.Fail(disp, theme, "no flash volume", diskErr)

@@ -36,7 +36,7 @@ func main() {
 	disp := st7789.New(machine.SPI0, machine.TFT_RST, machine.TFT_WRX, machine.TFT_CS, machine.TFT_BACKLIGHT)
 	disp.Configure(st7789.Config{Rotation: st7789.ROTATION_270, Height: 320})
 	theme := tinypod.ColorTheme()
-	tinypod.Message(&disp, theme, "tinypod", "starting")
+	tinypod.Splash(&disp, theme)
 
 	if diskErr != nil {
 		tinypod.Fail(&disp, theme, "no flash volume", diskErr)

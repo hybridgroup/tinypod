@@ -23,13 +23,18 @@ type Config struct {
 	ReadAhead bool
 }
 
-// Run scans the songs and runs the player. It returns only if the scan fails.
+// Run scans the songs and runs the player. It shows the splash screen while it
+// scans, unless the device main called Splash already. It returns only if the
+// scan fails.
 func Run(c Config) error {
-	Message(c.Display, c.Theme, "tinypod", "reading songs")
+	if splashAt.IsZero() {
+		Splash(c.Display, c.Theme)
+	}
 	lib, err := scan(c.Volume.fs)
 	if err != nil {
 		return err
 	}
+	waitSplash()
 	println("songs:", len(lib.songs), "albums:", len(lib.albums))
 	player := tinyplayer.New(c.Output)
 	d := newDeck(player, c.Volume.fs, c.ReadAhead)

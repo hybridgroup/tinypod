@@ -113,9 +113,10 @@ func TestScanRoot(t *testing.T) {
 }
 
 type fakeDisplay struct {
-	w, h   int16
-	pixels map[[2]int16]color.RGBA
-	frames int
+	w, h    int16
+	pixels  map[[2]int16]color.RGBA
+	frames  int
+	outside int
 }
 
 func newFakeDisplay(w, h int16) *fakeDisplay {
@@ -124,6 +125,10 @@ func newFakeDisplay(w, h int16) *fakeDisplay {
 
 func (d *fakeDisplay) Size() (int16, int16) { return d.w, d.h }
 func (d *fakeDisplay) SetPixel(x, y int16, c color.RGBA) {
+	if x < 0 || y < 0 || x >= d.w || y >= d.h {
+		d.outside++
+		return
+	}
 	d.pixels[[2]int16{x, y}] = c
 }
 func (d *fakeDisplay) Display() error { d.frames++; return nil }
@@ -145,6 +150,30 @@ func TestLayout(t *testing.T) {
 			t.Errorf("%dx%d: rows end at %d", tc.w, tc.h, end)
 		}
 	}
+}
+
+func TestSplash(t *testing.T) {
+	useClock(t)
+	for _, tc := range []struct {
+		w, h  int16
+		theme Theme
+	}{
+		{128, 64, MonoTheme()},
+		{320, 240, ColorTheme()},
+	} {
+		d := newFakeDisplay(tc.w, tc.h)
+		Splash(d, tc.theme)
+		fg := 0
+		for _, c := range d.pixels {
+			if c == tc.theme.FG {
+				fg++
+			}
+		}
+		if d.outside != 0 || fg == 0 || d.frames != 1 {
+			t.Errorf("%dx%d: outside %d, fg pixels %d, frames %d", tc.w, tc.h, d.outside, fg, d.frames)
+		}
+	}
+	splashAt = time.Time{}
 }
 
 func TestRowSkip(t *testing.T) {

@@ -23,7 +23,7 @@ func main() {
 	i2c.Configure(machine.I2CConfig{SDA: machine.D4, SCL: machine.D5, Frequency: 400 * machine.KHz})
 	disp := tinypod.NewSSD1306(i2c, 0x3C, 128, 64)
 	theme := tinypod.MonoTheme()
-	tinypod.Message(disp, theme, "tinypod", "starting")
+	tinypod.Splash(disp, theme)
 
 	out, err := audioOutput()
 	if err != nil {

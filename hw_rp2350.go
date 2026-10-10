@@ -15,6 +15,10 @@ var (
 	i2c = machine.I2C1
 )
 
+// piolib I2S queues one DMA buffer at a time, so a read ahead goroutine that
+// holds the CPU in an SPI transfer makes the next buffer start late.
+const readAhead = false
+
 // audioOutput uses BCK on D6 and LCK on D7, which must be the pin after BCK.
 func audioOutput() (tinyplayer.Output, error) {
 	sm, err := pio.PIO0.ClaimStateMachine()

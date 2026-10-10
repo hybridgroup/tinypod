@@ -13,6 +13,8 @@ var (
 	i2c = machine.I2C0
 )
 
+const readAhead = true
+
 func audioOutput() (tinyplayer.Output, error) {
 	err := machine.I2S0.Configure(machine.I2SConfig{
 		SCK:            machine.D6,

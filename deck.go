@@ -95,6 +95,9 @@ func (d *deck) Read(b []byte) (int, error) {
 	if d.cut.Load() {
 		return 0, io.EOF
 	}
+	if !readAhead {
+		return d.f.Read(b)
+	}
 	return d.ahead.Read(b)
 }
 
@@ -117,11 +120,15 @@ func (d *deck) run() {
 		if err := d.fs.OpenFile(&d.f, song, fat.ModeRead); err != nil {
 			println("open", song, err.Error())
 		} else {
-			d.ahead.start(&d.f)
+			if readAhead {
+				d.ahead.start(&d.f)
+			}
 			if err := d.player.Play(d); err != nil && !d.cut.Load() {
 				println("play", song, err.Error())
 			}
-			d.ahead.halt()
+			if readAhead {
+				d.ahead.halt()
+			}
 			d.f.Close()
 		}
 

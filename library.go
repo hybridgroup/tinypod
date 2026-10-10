@@ -1,6 +1,4 @@
-//go:build esp32c3 || rp2350
-
-package main
+package tinypod
 
 import (
 	"slices"

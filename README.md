@@ -1,22 +1,91 @@
 # tinypod
 
-tinypod is an iPod classic style music player. It runs on a XIAO board plugged into the [Seeed XIAO expansion board](https://wiki.seeedstudio.com/Seeeduino-XIAO-Expansion-Board/). It plays WAV files from the microSD card and shows its menus on the OLED.
+tinypod is an iPod classic style music player. It plays WAV files and shows Songs, Albums, Shuffle Songs and Now Playing menus.
 
-It runs on the xiao-esp32c3 and the xiao-rp2350.
+The `tinypod` package in this folder has no hardware code. It works with any display, songs on an SD card or in flash, and any set of buttons. A small main for each device sets up the hardware and calls `tinypod.Run`.
 
-## Hardware
+| Device | Folder | Display | Songs | Input | Audio |
+|---|---|---|---|---|---|
+| xiao-esp32c3 or xiao-rp2350 on the Seeed XIAO expansion board | `xiao-expansion` | SSD1306 128x64 | microSD card | Gamepad QT, or the board button | I2S DAC |
+| Pico 2 | `pico2-ssd1306` | SSD1306 128x64 | flash, USB drive | 4 buttons | I2S DAC |
+| Gopher badge | `gopher-badge` | ST7789 320x240 color | flash, USB drive | 6 badge buttons | speaker |
+
+## Build and flash
+
+```
+tinygo flash -tags fat_noexfat -target=xiao-rp2350 ./examples/tinypod/xiao-expansion
+tinygo flash -tags fat_noexfat -target=xiao-esp32c3 ./examples/tinypod/xiao-expansion
+tinygo flash -tags fat_noexfat -target=pico2 ./examples/tinypod/pico2-ssd1306
+tinygo flash -tags fat_noexfat -target=gopher-badge ./examples/tinypod/gopher-badge
+```
+
+At start the screen shows "starting" and then "reading songs". The serial output shows the number of songs and albums. If something fails, the screen shows the error.
+
+## Songs
+
+Put WAV files in folders under `/Music`. Each folder is an album. Files in one level of subfolders are added to the album too. If there is no `/Music` folder, tinypod uses the root of the volume.
+
+```
+/Music/Album One/01 Song.wav
+/Music/Album One/02 Song.wav
+/Music/Album Two/Disc 1/01 Song.wav
+/Music/Single.wav
+```
+
+The song name on the screen is the file name without `.wav`. The album name is the folder name.
+
+Use ffmpeg to make the files. 16 bit PCM sounds best. IMA ADPCM files are 4 times smaller, which helps when songs are in flash.
+
+```
+ffmpeg -i in.mp3 -ac 2 -ar 44100 -c:a pcm_s16le out.wav
+ffmpeg -i in.mp3 -ac 2 -ar 22050 -c:a adpcm_ima_wav out.wav
+```
+
+### SD card
+
+Use a FAT32 microSD card of 4 GB to 32 GB (SDHC). tinypod mounts the card read only and never writes to it.
+
+### Flash and USB drive
+
+On boards with songs in flash, the board shows up as a USB drive named tinypod. The first time, tinypod formats the flash. Copy WAV files to the drive. One second after the copy ends, tinypod stops playback, reads the songs again and goes back to the main menu.
+
+| Device | Flash | Space for songs | 22.05 kHz stereo ADPCM |
+|---|---|---|---|
+| Pico 2 | 4 MB | 3 MB | about 2.4 minutes |
+| Gopher badge | 8 MB | 6 MB | about 4.8 minutes |
+
+22.05 kHz stereo ADPCM uses about 22 KB per second. Mono ADPCM at 16 kHz uses 8 KB per second and gives about 6.5 and 13 minutes.
+
+## Controls
+
+The menus and Now Playing use these events. Each device maps its buttons to them.
+
+| Event | Menus | Now Playing |
+|---|---|---|
+| Up, Down | Move | Volume |
+| Left | Back | Previous song, or start of song after 3 seconds |
+| Right | Open | Next song |
+| Select | Open | Play/pause |
+| Back | Back | Back to menus |
+| PlayPause | Play/pause | Play/pause |
+| VolumeUp, VolumeDown | Volume | Volume |
+| Next, Previous | Next or previous song | Next or previous song |
+
+If nothing is playing, PlayPause plays all songs from the start.
+
+## xiao-expansion
+
+A xiao-esp32c3 or xiao-rp2350 plugged into the [Seeed XIAO expansion board](https://wiki.seeedstudio.com/Seeeduino-XIAO-Expansion-Board/). The expansion board has the microSD slot, the OLED, a button and a buzzer. You connect the DAC and the gamepad.
+
+Parts:
 
 - xiao-esp32c3 or xiao-rp2350
-- Seeed XIAO expansion board, which has the microSD slot, the 128x64 SSD1306 OLED, a button and a buzzer
+- Seeed XIAO expansion board
 - An I2S DAC such as the Adafruit PCM5102, with headphones or a powered speaker
 - Optional: an [Adafruit Mini I2C Gamepad QT](https://www.adafruit.com/product/5743) and a Grove to STEMMA QT cable
-- A FAT32 microSD card of 4 GB to 32 GB (SDHC)
+- A microSD card, see [SD card](#sd-card)
 
-## Wiring
-
-The expansion board connects the SD card, the OLED and the button. You only connect the DAC and the gamepad.
-
-The expansion board already uses D1 for the button, D2 and D8 to D10 for the SD card, D3 for the buzzer, and D4/D5 for I2C. The DAC uses the free pins D0, D6 and D7. Use jumper wires from the expansion board pin headers.
+The expansion board uses D1 for the button, D2 and D8 to D10 for the SD card, D3 for the buzzer, and D4/D5 for I2C. The DAC uses the free pins D0, D6 and D7. Use jumper wires from the expansion board pin headers.
 
 | DAC pin | XIAO pin | xiao-esp32c3 | xiao-rp2350 |
 |---|---|---|---|
@@ -30,101 +99,119 @@ On the RP2350 the WSEL pin must be the pin after BCK, because of how the PIO I2S
 
 Plug the gamepad into the Grove I2C port. It shares the bus with the OLED. The gamepad uses address 0x50 and the OLED uses 0x3C.
 
-## SD card
-
-Put WAV files in folders under `/Music`. Each folder is an album. Files in one level of subfolders are added to the album too. If there is no `/Music` folder, tinypod uses the root of the card.
-
-```
-/Music/Album One/01 Song.wav
-/Music/Album One/02 Song.wav
-/Music/Album Two/Disc 1/01 Song.wav
-/Music/Single.wav
-```
-
-The song name on the screen is the file name without `.wav`. The album name is the folder name.
-
-Use ffmpeg to make the files. 16 bit stereo at 44.1 kHz or 22.05 kHz both play well.
-
-```
-ffmpeg -i in.mp3 -ac 2 -ar 44100 -c:a pcm_s16le out.wav
-```
-
-IMA ADPCM files are 4 times smaller and also play.
-
-```
-ffmpeg -i in.mp3 -ac 2 -ar 44100 -c:a adpcm_ima_wav out.wav
-```
-
-tinypod mounts the card read only. It never writes to the card.
-
-## Build and flash
-
-```
-tinygo flash -tags fat_noexfat -target=xiao-rp2350 ./examples/tinypod
-tinygo flash -tags fat_noexfat -target=xiao-esp32c3 ./examples/tinypod
-```
-
-At start the OLED shows "starting" and then "reading songs". The serial output shows the number of songs and albums, and "gamepad found" if there is a gamepad. If the card does not mount, the OLED shows the error.
-
-## Controls
-
 With the gamepad:
 
-| Control | Menus | Now Playing |
-|---|---|---|
-| Joystick up/down | Move | Volume |
-| Joystick left | Back | Previous song, or start of song after 3 seconds |
-| Joystick right | Open | Next song |
-| A | Open | Play/pause |
-| B or Select | Back | Back to menus |
-| Start | Play/pause | Play/pause |
-| X/Y | Volume up/down | Volume up/down |
-| Expansion board button | Back | Back to menus |
-
-If nothing is playing, Start plays all songs from the start.
-
-With no gamepad, the expansion board button does everything. The action happens when you release the button.
-
-| Press | Action |
+| Control | Event |
 |---|---|
-| Tap | Move down |
-| Hold 0.5 seconds | Open, or play/pause on Now Playing |
+| Joystick | Up, Down, Left, Right |
+| A | Select |
+| B, Select | Back |
+| Start | PlayPause |
+| X, Y | VolumeUp, VolumeDown |
+| Expansion board button | Back |
+
+With no gamepad, the expansion board button does everything. It acts when you release it.
+
+| Press | Event |
+|---|---|
+| Tap | Down |
+| Hold 0.5 seconds | Select |
 | Hold 1.5 seconds | Back |
 
 tinypod looks for the gamepad only at start. To change from one input to the other, reset the board.
 
-## Menus
+## pico2-ssd1306
 
-- Songs shows all songs, sorted by name.
-- Albums shows the folders. Open one to see its songs.
-- Shuffle Songs plays all songs in random order.
-- Now Playing shows the song, the album, the place in the queue, a time bar and the time. When you change the volume, a volume bar shows for 2 seconds.
+A Pico 2 with an SSD1306 OLED, four buttons and an I2S DAC.
 
-When you open a song, tinypod plays that list from that song. At the end of the list playback stops.
+Parts:
+
+- Raspberry Pi Pico 2
+- SSD1306 128x64 I2C OLED at address 0x3C
+- 4 push buttons
+- An I2S DAC such as the Adafruit PCM5102
+
+| Part | Pin | Pico 2 |
+|---|---|---|
+| OLED | SDA | GPIO6 |
+| OLED | SCL | GPIO7 |
+| OLED | VCC, GND | 3V3, GND |
+| DAC | DIN | GPIO2 |
+| DAC | BCK | GPIO3 |
+| DAC | WSEL (LCK) | GPIO4 |
+| DAC | VIN, GND | 3V3, GND |
+| Up button | | GPIO10 |
+| Down button | | GPIO11 |
+| Select button | | GPIO12 |
+| Back button | | GPIO13 |
+
+Connect the other side of each button to GND. The pins use the internal pull up.
+
+| Button | Press | Hold 0.5 seconds |
+|---|---|---|
+| Up | Up, repeats while held | |
+| Down | Down, repeats while held | |
+| Select | Select | PlayPause |
+| Back | Back | Next |
+
+## gopher-badge
+
+The gopher badge needs no wiring. tinypod uses the 320x240 color screen, the six buttons and the speaker.
+
+| Button | Press | Hold 0.5 seconds |
+|---|---|---|
+| Up | Up, repeats while held | |
+| Down | Down, repeats while held | |
+| Left | Left | |
+| Right | Right | |
+| A | Select | PlayPause |
+| B | Back | |
+
+The speaker plays mono audio through the `pwm` package.
+
+## Add a device
+
+Write a main that sets up the hardware and fills a `tinypod.Config`:
+
+```go
+err := tinypod.Run(tinypod.Config{
+	Display: disp,                // any driver with Size, SetPixel and Display
+	Theme:   tinypod.MonoTheme(), // or ColorTheme, or your own font and colors
+	Output:  out,                 // I2S or pwm.PWM
+	Volume:  vol,                 // from MountSD or MountFlash
+	Input: tinypod.Buttons(
+		tinypod.Button{Pressed: up, Press: tinypod.Up, Repeat: true},
+		tinypod.Button{Pressed: sel, Press: tinypod.Select, Hold: tinypod.PlayPause},
+	),
+})
+```
+
+- Display: tinypod uses `FillRectangle` too if the driver has it. For an SSD1306 on I2C use `tinypod.NewSSD1306`, see [Screen](#screen).
+- Theme: the layout comes from the display size and the font. `MonoTheme` uses an 8 point font for small screens. `ColorTheme` uses Noto Sans 12 point.
+- Volume: `MountSD` needs the SPI bus at 400 kHz and a function that raises the clock after setup. `MountFlash` takes a `flashdisk.Disk`. Call `msc.Port(disk)` before `machine.USBDev.Configure` so it shows up as a USB drive.
+- Input: `Buttons` for buttons, `HoldButton` for one button, `Gamepad` for the Gamepad QT with a `GamepadMap`, and `Inputs` to use several at once. `Pressed` is a function, so a button can come from a pin, an I/O expander or a touch pad.
+- ReadAhead: set it if the display or the storage holds the CPU for long, as on the ESP32-C3. See [Read ahead](#read-ahead).
 
 ## How it works
 
-tinypod has two main goroutines. The UI loop reads the input and draws the screen. The deck goroutine plays songs. On the ESP32-C3 a third goroutine reads songs ahead from the card. The arrows show the direction of the data.
+tinypod has two main goroutines. The UI loop reads the input and draws the screen. The deck goroutine plays songs. With ReadAhead a third goroutine reads songs ahead. The arrows show the direction of the data. The device main sets up the boxes on the left and right.
 
 ```mermaid
 flowchart LR
-    subgraph inputs [Input hardware]
-        SD[(microSD card)]
-        PAD[Gamepad QT]
-        BTN[D1 button]
+    subgraph devin [Device inputs]
+        VOL[Volume<br/>MountSD or MountFlash]
+        INP[Input<br/>Buttons, HoldButton, Gamepad]
     end
 
     subgraph storage [Storage]
-        SDDRV[drivers sd.SPICard]
         FAT[soypat/fat]
-        LIB[library.go<br/>scan at start]
-        AHEAD[ahead.go<br/>32 KB ring buffer<br/>ESP32-C3 only]
+        LIB[library.go<br/>scan]
+        AHEAD[ahead.go<br/>32 KB ring buffer<br/>if ReadAhead]
     end
 
     subgraph ui [UI loop]
-        IN[input.go]
         UIL[ui.go<br/>menus and Now Playing]
-        SCR[screen.go]
+        SCR[display.go<br/>rows, skips rows that did not change]
     end
 
     subgraph play [Deck goroutine]
@@ -132,82 +219,89 @@ flowchart LR
         PLAYER[tinyplayer.Player<br/>wav.Decoder]
     end
 
-    subgraph outputs [Output hardware]
-        OLED[SSD1306 OLED]
-        DAC[I2S DAC]
-    end
-
-    SD -- SPI --> SDDRV --> FAT
+    VOL --> FAT
     FAT --> LIB
     FAT -- file data --> AHEAD
     AHEAD -- file data --> DECK
-    FAT -. RP2350 reads directly .-> DECK
+    FAT -. without ReadAhead .-> DECK
+    VOL -. USB copy done .-> UIL
 
-    PAD -- I2C --> IN
-    BTN -- GPIO --> IN
-    IN -- events --> UIL
+    INP -- events --> UIL
     LIB -- albums and songs --> UIL
     UIL -- play, skip, pause --> DECK
     DECK -- song, progress --> UIL
 
-    UIL --> SCR -- I2C --> OLED
-    DECK --> PLAYER -- I2S --> DAC
+    subgraph devout [Device outputs]
+        DISP[Display<br/>SSD1306, ST7789, ...]
+        OUT[Output<br/>I2S or PWM]
+    end
+
+    UIL --> SCR --> DISP
+    DECK --> PLAYER --> OUT
 ```
 
 ### Start
 
-`main.go` silences the buzzer on D3, sets up I2C at 400 kHz and starts the OLED. Then it sets up the I2S output, mounts the SD card and scans the music. Last it looks for the gamepad and starts the UI loop.
+The device main sets up the display, the audio output, the volume and the input. `Run` scans the songs, starts the deck goroutine and runs the UI loop.
 
-### SD card
+### Storage
 
-`card.go` uses the `sd` package from [tinygo.org/x/drivers](https://github.com/tinygo-org/drivers). The card starts at 400 kHz, because the SD specification requires a slow clock during setup. Then the SPI clock goes to 20 MHz. `sd.SPICard` has the block methods that [github.com/soypat/fat](https://github.com/soypat/fat) needs, so the FAT volume mounts on it with no adapter.
+`MountSD` uses the `sd` package from [tinygo.org/x/drivers](https://github.com/tinygo-org/drivers). The card starts at 400 kHz, because the SD specification requires a slow clock during setup. Then the device raises the SPI clock. `sd.SPICard` has the block methods that [github.com/soypat/fat](https://github.com/soypat/fat) needs, so the FAT volume mounts on it with no adapter.
+
+`MountFlash` uses `storage.Mount` from this repo on a `flashdisk.Disk`. The UI loop watches the disk change counter. When the USB host stops writing for one second, tinypod stops the deck, writes the flash cache, mounts the volume again and scans the songs.
 
 ### Music library
 
-`library.go` reads the folders once at start. It keeps a list of albums and a sorted list of all songs. Each song is a full path on the card.
+`library.go` reads the folders and keeps a list of albums and a sorted list of all songs. Each song is a full path on the volume.
 
 ### Playback
 
-`deck.go` plays a queue of songs in its own goroutine. It opens each file and gives it to `tinyplayer.Player`, which decodes the WAV data and writes it to the I2S output. When a song ends, the deck plays the next one.
+`deck.go` plays a queue of songs in its own goroutine. It opens each file and gives it to `tinyplayer.Player`, which decodes the WAV data and writes it to the output. When a song ends, the deck plays the next one.
 
 The UI asks for a new song with `play` or `skip`. These set the next position and a cut flag, then call `Player.Stop`. The deck reads the file through its own `Read` method, which returns end of file when the cut flag is set. Thus a song always ends when you ask, even if `Stop` comes before `Play` starts. Pause uses `Player.Pause`, and the time bar uses `Player.Progress`.
 
 ### Read ahead
 
-On the ESP32-C3, `ahead.go` reads each song into a 32 KB ring buffer in a separate goroutine. The player decodes from this buffer. The C3 I2S output holds only about 9 ms of audio at 44.1 kHz, and SD reads and screen updates can take longer than that. The buffer holds about 190 ms, so these delays do not stop the audio.
+With ReadAhead, `ahead.go` reads each song into a 32 KB ring buffer in a separate goroutine, and the player decodes from this buffer. The ESP32-C3 I2S output holds only about 9 ms of audio at 44.1 kHz, and SD reads and screen updates can take longer. The buffer holds about 190 ms, so these delays do not stop the audio.
 
-The RP2350 does not use the read ahead buffer. piolib I2S starts one DMA buffer at a time. The SPI transfers in the read ahead goroutine do not yield, so the next audio buffer started late and the audio clicked. On the RP2350 the player reads directly from the card. `readAhead` in `hw_esp32c3.go` and `hw_rp2350.go` selects this.
+Leave ReadAhead off with piolib I2S on the RP2040 and RP2350. piolib I2S starts one DMA buffer at a time, and SPI transfers in the read ahead goroutine do not yield. The next audio buffer then starts late and the audio clicks.
 
 ### Screen
 
-`screen.go` draws into the SSD1306 frame buffer with [tinyfont](https://github.com/tinygo-org/tinyfont). `ui.go` keeps a stack of menus and draws the top one, or the Now Playing screen.
+`display.go` splits the screen into rows. Row 0 is the title bar, and the other rows have the height of the font. `ui.go` keeps a stack of menus and draws the top one, or the Now Playing screen.
 
-The UI loop runs every 30 ms. It reads the input, and it draws only when something changes. On Now Playing it also draws once per second for the time.
+Each row has a key, made from what it shows. A row is drawn again only when its key changes, and then its background is filled before the text. Thus on Now Playing only the time bar and the time change each second. This matters on displays like the ST7789, where each pixel is a separate SPI write. On buffered displays like the SSD1306, `Display` sends the frame only if a row changed.
 
-On the ESP32-C3 an I2C write holds the CPU until it is done. A full frame is 1 KB and takes about 30 ms at 400 kHz. Thus `show` sends the frame in 32 byte pieces and yields after each piece, so audio playback can continue.
+The UI loop runs every 30 ms. It reads the input and draws only when something changes.
+
+On the ESP32-C3 an I2C write holds the CPU until it is done. A full SSD1306 frame is 1 KB and takes about 30 ms at 400 kHz. `tinypod.NewSSD1306` sends the frame in 32 byte pieces and yields after each piece, so audio playback can continue.
 
 ### Input
 
-`input.go` reads the gamepad through the seesaw chip on it. It reads the buttons as one 32 bit value and the joystick from two ADC channels. A button acts when you push it. The joystick repeats after 400 ms and then every 120 ms while you hold it. The button on D1 measures how long you hold it.
+`Buttons` reads each button every 30 ms. A button with Hold fires Press on a short press and Hold after 500 ms. A button with Repeat fires again after 400 ms and then every 120 ms. `Gamepad` reads the seesaw chip on the Gamepad QT, the buttons as one 32 bit value and the joystick from two ADC channels.
 
 ## Files
 
 | File | What it does |
 |---|---|
-| `main.go` | Setup and start |
-| `hw_esp32c3.go`, `hw_rp2350.go` | Buses, I2S output and read ahead setting for each board |
-| `card.go` | SD card and FAT mount |
+| `tinypod.go` | `Config`, `Run`, `Fail` |
+| `display.go` | `Display`, `Theme`, rows and `Message` |
+| `ssd1306.go` | SSD1306 that sends the frame in pieces |
+| `ui.go` | Menus and Now Playing |
+| `input.go` | `Buttons`, `HoldButton`, `Gamepad`, `Inputs` |
+| `storage.go` | `MountSD`, `MountFlash` and the USB copy watch |
 | `library.go` | Album and song scan |
 | `deck.go` | Playback goroutine and song queue |
 | `ahead.go` | Read ahead ring buffer |
-| `screen.go` | OLED drawing |
-| `ui.go` | Menus and Now Playing |
-| `input.go` | Gamepad and button |
+| `xiao-expansion/`, `pico2-ssd1306/`, `gopher-badge/` | Device mains |
+
+`go test ./examples/tinypod` runs the tests on your computer, with a FAT volume in memory and a fake display.
 
 ## Known issues
 
-- tinypod needs the `sd` fix in [tinygo-org/drivers#905](https://github.com/tinygo-org/drivers/pull/905). Without it, the SD card does not mount.
-- On the RP2350 it needs [tinygo-org/pio#65](https://github.com/tinygo-org/pio/pull/65). Without it, piolib I2S and SPI0 use the same DMA channel, and the board stops when a song starts.
+- tinypod on an SD card needs the `sd` fix in [tinygo-org/drivers#905](https://github.com/tinygo-org/drivers/pull/905). Without it, the SD card does not mount.
+- On the RP2350 with piolib I2S and SPI it needs [tinygo-org/pio#65](https://github.com/tinygo-org/pio/pull/65). Without it, piolib I2S and SPI0 use the same DMA channel, and the board stops when a song starts.
 - `go.mod` uses the branches of these two PRs until they are merged.
 - The `sd` package reads several blocks at a time correctly only on SDHC cards. Do not use cards of 2 GB or less.
 - Cards of 64 GB or more usually come formatted as exFAT. Format them as FAT32.
+- The ColorTheme font is Noto Sans from tinyfont, under the SIL Open Font License.

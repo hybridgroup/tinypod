@@ -1,11 +1,10 @@
-//go:build esp32c3 || rp2350
-
-package main
+package tinypod
 
 import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/hybridgroup/tinyplayer"
 	"github.com/soypat/fat"
@@ -13,12 +12,14 @@ import (
 
 // deck plays a queue of songs in its own goroutine.
 type deck struct {
-	player *tinyplayer.Player
-	fs     *fat.FS
-	wake   chan struct{}
-	f      fat.File
-	ahead  ahead
-	cut    atomic.Bool
+	player    *tinyplayer.Player
+	fs        *fat.FS
+	readAhead bool
+	wake      chan struct{}
+	f         fat.File
+	ahead     *ahead
+	cut       atomic.Bool
+	idle      atomic.Bool
 
 	mu     sync.Mutex
 	queue  []string
@@ -27,10 +28,26 @@ type deck struct {
 	active bool
 }
 
-func newDeck(player *tinyplayer.Player, fs *fat.FS) *deck {
-	d := &deck{player: player, fs: fs, wake: make(chan struct{}, 1), jump: -1}
+func newDeck(player *tinyplayer.Player, fs *fat.FS, readAhead bool) *deck {
+	d := &deck{player: player, fs: fs, readAhead: readAhead, wake: make(chan struct{}, 1), jump: -1}
+	if readAhead {
+		d.ahead = &ahead{}
+	}
 	go d.run()
 	return d
+}
+
+// stop ends playback, clears the queue and waits until no file is open.
+func (d *deck) stop() {
+	d.mu.Lock()
+	d.queue = nil
+	d.active = false
+	d.cut.Store(true)
+	d.mu.Unlock()
+	d.restart()
+	for !d.idle.Load() {
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // play starts the queue at song i.
@@ -95,7 +112,7 @@ func (d *deck) Read(b []byte) (int, error) {
 	if d.cut.Load() {
 		return 0, io.EOF
 	}
-	if !readAhead {
+	if !d.readAhead {
 		return d.f.Read(b)
 	}
 	return d.ahead.Read(b)
@@ -111,22 +128,24 @@ func (d *deck) run() {
 		d.cut.Store(false)
 		if !d.active || len(d.queue) == 0 {
 			d.mu.Unlock()
+			d.idle.Store(true)
 			<-d.wake
 			continue
 		}
+		d.idle.Store(false)
 		song := d.queue[d.pos]
 		d.mu.Unlock()
 
 		if err := d.fs.OpenFile(&d.f, song, fat.ModeRead); err != nil {
 			println("open", song, err.Error())
 		} else {
-			if readAhead {
+			if d.readAhead {
 				d.ahead.start(&d.f)
 			}
 			if err := d.player.Play(d); err != nil && !d.cut.Load() {
 				println("play", song, err.Error())
 			}
-			if readAhead {
+			if d.readAhead {
 				d.ahead.halt()
 			}
 			d.f.Close()

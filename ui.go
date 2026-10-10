@@ -1,6 +1,4 @@
-//go:build esp32c3 || rp2350
-
-package main
+package tinypod
 
 import (
 	"math/rand"
@@ -11,10 +9,10 @@ import (
 )
 
 const (
-	rows       = 5
-	rowHeight  = 10
-	listTop    = 11
-	volumeStep = 16
+	volumeStep    = 16
+	volumeDefault = 160
+	volumeShow    = 2 * time.Second
+	loopDelay     = 30 * time.Millisecond
 )
 
 type menu struct {
@@ -27,10 +25,11 @@ type menu struct {
 
 type app struct {
 	scr        *screen
+	vol        *Volume
 	lib        *library
 	deck       *deck
 	player     *tinyplayer.Player
-	in         input
+	in         Input
 	stack      []*menu
 	nowPlaying bool
 	volume     int
@@ -39,17 +38,23 @@ type app struct {
 	lastSong   string
 	lastPaused bool
 	lastSecond time.Duration
+	volumeOn   bool
 }
 
-func newApp(scr *screen, lib *library, d *deck, p *tinyplayer.Player, in input) *app {
-	a := &app{scr: scr, lib: lib, deck: d, player: p, in: in, volume: 160, dirty: true}
+func newApp(scr *screen, vol *Volume, lib *library, d *deck, p *tinyplayer.Player, in Input) *app {
+	a := &app{scr: scr, vol: vol, lib: lib, deck: d, player: p, in: in, volume: volumeDefault, dirty: true}
 	p.SetVolume(a.volume)
+	a.home()
+	return a
+}
+
+func (a *app) home() {
 	a.stack = []*menu{{
 		title: "tinypod",
 		items: []string{"Songs", "Albums", "Shuffle Songs", "Now Playing"},
 		open:  a.openMain,
 	}}
-	return a
+	a.nowPlaying = false
 }
 
 func (a *app) openMain(i int) {
@@ -95,34 +100,65 @@ func (a *app) push(m *menu) {
 
 func (a *app) run() {
 	for {
-		if ev := a.in.poll(); ev != none {
-			a.handle(ev)
-			a.dirty = true
-		}
-		song, _, _ := a.deck.current()
-		paused := a.player.Paused()
-		if song != a.lastSong || paused != a.lastPaused {
-			a.lastSong, a.lastPaused = song, paused
-			a.dirty = true
-		}
-		if a.nowPlaying {
-			el, _ := a.player.Progress()
-			if s := el / time.Second; s != a.lastSecond {
-				a.lastSecond = s
-				a.dirty = true
-			}
-		}
-		if a.dirty {
-			a.dirty = false
-			a.draw()
-		}
-		time.Sleep(30 * time.Millisecond)
+		a.step()
+		time.Sleep(loopDelay)
 	}
 }
 
-func (a *app) handle(ev event) {
+// step polls the input, checks the player and the volume, and draws.
+func (a *app) step() {
+	if a.vol.settled() {
+		a.reload()
+	}
+	if ev := a.in.Poll(); ev != None {
+		a.handle(ev)
+		a.dirty = true
+	}
+	song, _, _ := a.deck.current()
+	paused := a.player.Paused()
+	if song != a.lastSong || paused != a.lastPaused {
+		a.lastSong, a.lastPaused = song, paused
+		a.dirty = true
+	}
+	if a.nowPlaying {
+		el, _ := a.player.Progress()
+		if s := el / time.Second; s != a.lastSecond {
+			a.lastSecond = s
+			a.dirty = true
+		}
+		if on := now().Sub(a.volumeAt) < volumeShow; on != a.volumeOn {
+			a.volumeOn = on
+			a.dirty = true
+		}
+	}
+	if a.dirty {
+		a.dirty = false
+		a.draw()
+	}
+}
+
+// reload reads the songs again after the user copied files over USB.
+func (a *app) reload() {
+	a.deck.stop()
+	a.scr.invalidate()
+	Message(a.scr.d, a.scr.t, "tinypod", "reading songs")
+	a.scr.invalidate()
+	if err := a.vol.reload(); err != nil {
+		println("reload:", err.Error())
+	}
+	lib, err := scan(a.vol.fs)
+	if err != nil {
+		println("scan:", err.Error())
+		lib = &library{}
+	}
+	a.lib = lib
+	a.home()
+	a.dirty = true
+}
+
+func (a *app) handle(ev Event) {
 	switch ev {
-	case playPause:
+	case PlayPause:
 		if song, _, _ := a.deck.current(); song == "" && len(a.lib.songs) > 0 {
 			a.deck.play(a.lib.songs, 0)
 			a.nowPlaying = true
@@ -130,11 +166,17 @@ func (a *app) handle(ev event) {
 		}
 		a.deck.togglePause()
 		return
-	case volumeUp:
+	case VolumeUp:
 		a.setVolume(a.volume + volumeStep)
 		return
-	case volumeDown:
+	case VolumeDown:
 		a.setVolume(a.volume - volumeStep)
+		return
+	case Next:
+		a.deck.skip(1)
+		return
+	case Previous:
+		a.previous()
 		return
 	}
 	if a.nowPlaying {
@@ -143,81 +185,104 @@ func (a *app) handle(ev event) {
 	}
 	m := a.stack[len(a.stack)-1]
 	switch ev {
-	case up:
+	case Up:
 		m.sel = max(m.sel-1, 0)
-	case down:
+	case Down:
 		m.sel = min(m.sel+1, len(m.items)-1)
-	case selectItem, right:
+	case Select, Right:
 		if len(m.items) > 0 {
 			m.open(m.sel)
 		}
-	case left, back:
+	case Left, Back:
 		if len(a.stack) > 1 {
 			a.stack = a.stack[:len(a.stack)-1]
 		}
 	}
 }
 
-func (a *app) handleNowPlaying(ev event) {
+func (a *app) handleNowPlaying(ev Event) {
 	switch ev {
-	case up:
+	case Up:
 		a.setVolume(a.volume + volumeStep)
-	case down:
+	case Down:
 		a.setVolume(a.volume - volumeStep)
-	case right:
+	case Right:
 		a.deck.skip(1)
-	case left:
-		if el, _ := a.player.Progress(); el > 3*time.Second {
-			a.deck.skip(0)
-		} else {
-			a.deck.skip(-1)
-		}
-	case selectItem:
+	case Left:
+		a.previous()
+	case Select:
 		a.deck.togglePause()
-	case back:
+	case Back:
 		a.nowPlaying = false
+	}
+}
+
+// previous goes to the start of the song, or to the song before in the first
+// 3 seconds.
+func (a *app) previous() {
+	if el, _ := a.player.Progress(); el > 3*time.Second {
+		a.deck.skip(0)
+	} else {
+		a.deck.skip(-1)
 	}
 }
 
 func (a *app) setVolume(v int) {
 	a.volume = max(0, min(256, v))
 	a.player.SetVolume(a.volume)
-	a.volumeAt = time.Now()
+	a.volumeAt = now()
 }
 
 func (a *app) draw() {
-	s := a.scr
-	s.clear()
 	if a.nowPlaying {
 		a.drawNowPlaying()
 	} else {
 		a.drawMenu(a.stack[len(a.stack)-1])
 	}
-	s.show()
+	a.scr.show()
 }
 
 func (a *app) titleBar(t string) {
 	s := a.scr
-	s.text(2, 8, t, white, 112)
-	s.rect(0, 10, width, 1, white)
-	if a.lastSong == "" {
-		return
+	state := "s"
+	if a.lastSong != "" {
+		state = "p"
+		if a.lastPaused {
+			state = "z"
+		}
 	}
-	if a.lastPaused {
-		s.rect(118, 1, 2, 7, white)
-		s.rect(122, 1, 2, 7, white)
-		return
-	}
-	for c := int16(0); c < 4; c++ {
-		s.rect(118+c, 1+c, 1, 7-2*c, white)
-	}
+	s.row(0, "T"+state+t, s.t.BG, func(top int16) {
+		size := s.ascent
+		x := s.w - size - 2
+		s.text(2, top, t, s.t.FG, x-2)
+		s.rect(0, s.titleH-1, s.w, 1, s.t.SelBG)
+		y := (s.titleH - 1 - size) / 2
+		switch state {
+		case "z":
+			bar := max(size/3, 1)
+			s.rect(x, y, bar, size, s.t.FG)
+			s.rect(x+size-bar, y, bar, size, s.t.FG)
+		case "p":
+			for c := int16(0); c <= size/2; c++ {
+				s.rect(x+c, y+c, 1, size-2*c, s.t.FG)
+			}
+		}
+	})
 }
 
 func (a *app) drawMenu(m *menu) {
 	s := a.scr
 	a.titleBar(m.title)
+	rows := s.rows() - 1
 	if len(m.items) == 0 {
-		s.text(2, listTop+18, "No songs", white, width)
+		lines := []string{"No songs"}
+		if a.vol.USB() {
+			lines = []string{"No songs.", "Copy WAV files", "to the USB drive."}
+		}
+		for i, l := range lines {
+			s.row(1+i, "E"+l, s.t.BG, func(top int16) { s.text(2, top, l, s.t.FG, s.w) })
+		}
+		s.clearFrom(1 + len(lines))
 		return
 	}
 	if m.sel < m.top {
@@ -225,21 +290,29 @@ func (a *app) drawMenu(m *menu) {
 	} else if m.sel >= m.top+rows {
 		m.top = m.sel - rows + 1
 	}
-	for r := 0; r < rows && m.top+r < len(m.items); r++ {
-		y := int16(listTop + 1 + r*rowHeight)
-		c := white
-		if m.top+r == m.sel {
-			s.rect(0, y, width-4, rowHeight, white)
-			c = black
+	n := len(m.items)
+	ts, te := 0, rows
+	if n > rows {
+		ts = m.top * rows / n
+		te = max(ts+1, (m.top+rows)*rows/n)
+	}
+	for r := 0; r < rows && m.top+r < n; r++ {
+		i := m.top + r
+		sel := i == m.sel
+		thumb := n > rows && r >= ts && r < te
+		key := "M" + flag(sel) + flag(thumb) + m.items[i]
+		bg, fg := s.t.BG, s.t.FG
+		if sel {
+			bg, fg = s.t.SelBG, s.t.SelFG
 		}
-		s.text(2, y+8, m.items[m.top+r], c, width-6)
+		s.row(1+r, key, bg, func(top int16) {
+			s.text(2, top, m.items[i], fg, s.w-6)
+			if thumb {
+				s.rect(s.w-3, top, 3, s.rowH, s.t.FG)
+			}
+		})
 	}
-	if n := len(m.items); n > rows {
-		h := rows * rowHeight
-		thumb := max(h*rows/n, 3)
-		pos := (h - thumb) * m.top / (n - rows)
-		s.rect(width-2, int16(listTop+1+pos), 2, int16(thumb), white)
-	}
+	s.clearFrom(1 + min(rows, n-m.top))
 }
 
 func (a *app) drawNowPlaying() {
@@ -247,27 +320,51 @@ func (a *app) drawNowPlaying() {
 	a.titleBar("Now Playing")
 	song, pos, n := a.deck.current()
 	if song == "" {
-		s.text(2, 32, "Nothing playing", white, width)
+		s.row(1, "NNothing playing", s.t.BG, func(top int16) {
+			s.text(2, top, "Nothing playing", s.t.FG, s.w)
+		})
+		s.clearFrom(2)
 		return
 	}
-	s.text(2, 21, strconv.Itoa(pos+1)+" of "+strconv.Itoa(n), white, width)
-	s.text(2, 32, title(song), white, width)
-	s.text(2, 43, albumOf(song), white, width)
+	lines := [...]string{strconv.Itoa(pos+1) + " of " + strconv.Itoa(n), title(song), albumOf(song)}
+	for i, l := range lines {
+		s.row(1+i, "N"+l, s.t.BG, func(top int16) { s.text(2, top, l, s.t.FG, s.w) })
+	}
 
 	el, total := a.player.Progress()
-	s.rect(2, 47, width-4, 1, white)
-	s.rect(2, 51, width-4, 1, white)
+	barW := s.w - 4
+	fill := int16(0)
 	if total > 0 {
-		s.rect(2, 48, int16(int64(width-4)*int64(el)/int64(total)), 3, white)
+		fill = int16(int64(barW) * int64(min(el, total)) / int64(total))
 	}
-	if time.Since(a.volumeAt) < 2*time.Second {
-		s.text(2, 62, "Vol", white, width)
-		s.rect(26, 56, int16((width-28)*a.volume/256), 5, white)
-		return
+	s.row(4, "B"+strconv.Itoa(int(fill)), s.t.BG, func(top int16) {
+		mid := top + s.rowH/2
+		s.rect(2, mid, barW, 1, s.t.FG)
+		s.rect(2, mid-1, fill, 3, s.t.SelBG)
+	})
+
+	if a.volumeOn {
+		s.row(5, "V"+strconv.Itoa(a.volume), s.t.BG, func(top int16) {
+			x := s.width("Vol ") + 2
+			s.text(2, top, "Vol", s.t.FG, s.w)
+			s.rect(x, top+s.rowH/2-2, (s.w-x-2)*int16(a.volume)/256, 4, s.t.SelBG)
+		})
+	} else {
+		left, right := clock(el), "-"+clock(total-el)
+		s.row(5, "C"+left+right, s.t.BG, func(top int16) {
+			s.text(2, top, left, s.t.FG, s.w)
+			x := s.w - 2 - s.width(right)
+			s.text(x, top, right, s.t.FG, s.w)
+		})
 	}
-	s.text(2, 62, clock(el), white, width)
-	rest := "-" + clock(total-el)
-	s.text(width-2-int16(len(rest)*charWidth), 62, rest, white, width)
+	s.clearFrom(6)
+}
+
+func flag(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
 }
 
 // clock formats d as m:ss.

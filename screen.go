@@ -15,6 +15,7 @@ const (
 	oledAddr  = 0x3C
 	width     = 128
 	charWidth = 6
+	chunkSize = 32
 )
 
 var (
@@ -25,7 +26,7 @@ var (
 
 type screen struct {
 	dev   *ssd1306.Device
-	chunk [width + 1]byte
+	chunk [chunkSize + 1]byte
 }
 
 func newScreen() *screen {
@@ -50,16 +51,16 @@ func (s *screen) rect(x, y, w, h int16, c color.RGBA) {
 	s.dev.FillRectangle(x, y, w, h, c)
 }
 
-// show sends the frame one 128 byte page at a time and yields in between,
-// so audio keeps flowing on boards where I2C blocks the CPU.
+// show sends the frame in small pieces and yields in between, so audio keeps
+// flowing on boards where I2C blocks the CPU.
 func (s *screen) show() {
 	for _, c := range [...]byte{ssd1306.COLUMNADDR, 0, width - 1, ssd1306.PAGEADDR, 0, 7} {
 		s.dev.Command(c)
 	}
 	buf := s.dev.GetBuffer()
 	s.chunk[0] = 0x40
-	for page := 0; page < 8; page++ {
-		copy(s.chunk[1:], buf[page*width:])
+	for i := 0; i < len(buf); i += chunkSize {
+		copy(s.chunk[1:], buf[i:i+chunkSize])
 		i2c.Tx(oledAddr, s.chunk[:], nil)
 		runtime.Gosched()
 	}

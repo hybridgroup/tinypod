@@ -17,6 +17,8 @@ const (
 // deck plays a queue of songs from the library in its own goroutine.
 type deck struct {
 	player    *tinyplayer.Player
+	out       tinyplayer.Output
+	on        bool
 	lib       *library
 	readAhead bool
 	wake      chan struct{}
@@ -34,7 +36,7 @@ type deck struct {
 }
 
 func newDeck(out tinyplayer.Output, lib *library, readAhead bool) *deck {
-	d := &deck{player: tinyplayer.New(out), lib: lib, readAhead: readAhead, wake: make(chan struct{}, 1), jump: -1}
+	d := &deck{player: tinyplayer.New(out), out: out, on: true, lib: lib, readAhead: readAhead, wake: make(chan struct{}, 1), jump: -1}
 	d.setVolume(volumeDefault)
 	if readAhead {
 		d.ahead = &ahead{}
@@ -153,6 +155,14 @@ func (d *deck) Read(b []byte) (int, error) {
 	return d.ahead.Read(b)
 }
 
+// power turns the output off while nothing plays, so speakers do not hiss.
+func (d *deck) power(on bool) {
+	if on != d.on {
+		d.on = on
+		d.out.Enable(on)
+	}
+}
+
 func (d *deck) run() {
 	for {
 		d.mu.Lock()
@@ -163,6 +173,7 @@ func (d *deck) run() {
 		d.cut.Store(false)
 		if !d.active || len(d.queue) == 0 {
 			d.mu.Unlock()
+			d.power(false)
 			d.idle.Store(true)
 			<-d.wake
 			continue
@@ -171,6 +182,7 @@ func (d *deck) run() {
 		song := d.queue[d.pos]
 		d.mu.Unlock()
 
+		d.power(true)
 		f, err := d.lib.open(song)
 		if err != nil {
 			println("open", song, err.Error())

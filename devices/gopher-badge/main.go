@@ -46,10 +46,11 @@ func main() {
 	enable := machine.SPEAKER_ENABLE
 	enable.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	enable.High()
-	out, err := pwm.New(machine.SPEAKER, machine.NoPin, 11)
+	p, err := pwm.New(machine.SPEAKER, machine.NoPin, 11)
 	if err != nil {
 		tinypod.Fail(&disp, theme, "no audio", err)
 	}
+	out := &speaker{PWM: p, enable: enable}
 
 	err = tinypod.Run(tinypod.Config{
 		Display:  &disp,
@@ -68,6 +69,18 @@ func main() {
 		),
 	})
 	tinypod.Fail(&disp, theme, "scan failed", err)
+}
+
+// speaker turns the amplifier off with the output, so it does not hiss while
+// nothing plays.
+type speaker struct {
+	*pwm.PWM
+	enable machine.Pin
+}
+
+func (s *speaker) Enable(on bool) {
+	s.PWM.Enable(on)
+	s.enable.Set(on)
 }
 
 // button is a badge button, which reads low when pressed.

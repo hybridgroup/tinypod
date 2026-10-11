@@ -5,7 +5,7 @@ go 1.24
 require (
 	github.com/hybridgroup/tinyplayer v0.0.0-20261011093738-3dddba4996d2
 	github.com/soypat/fat v0.2.2-0.20261001161623-e5421565dcac
-	github.com/tinygo-org/pio v0.3.1-0.20261010161652-b6420be1d327
+	github.com/tinygo-org/pio v0.3.1-0.20261011134346-ef634f79e2ea
 	tinygo.org/x/drivers v0.36.1-0.20261010154131-b620b0b7f928
 	tinygo.org/x/tinyfont v0.7.0
 )

@@ -14,6 +14,8 @@ github.com/soypat/fat v0.2.2-0.20261001161623-e5421565dcac h1:Mh+y0og4BsL8t9L9Hx
 github.com/soypat/fat v0.2.2-0.20261001161623-e5421565dcac/go.mod h1:6cCZCfoOpl4IbaA4ohTrTYp1ejoUGEoiToDXpXDfAk0=
 github.com/tinygo-org/pio v0.3.1-0.20261010161652-b6420be1d327 h1:nLz0uHg6WQVGyeGZq8NNMDb4gfXG4E8ARDpzOgh5KTY=
 github.com/tinygo-org/pio v0.3.1-0.20261010161652-b6420be1d327/go.mod h1:wf6c6lKZp+pQOzKKcpzchmRuhiMc27ABRuo7KVnaMFU=
+github.com/tinygo-org/pio v0.3.1-0.20261011134346-ef634f79e2ea h1:aoLhgmUqUNfgEvo52eHqDpgrrVeZDTNMjt7b4oH7+yA=
+github.com/tinygo-org/pio v0.3.1-0.20261011134346-ef634f79e2ea/go.mod h1:wf6c6lKZp+pQOzKKcpzchmRuhiMc27ABRuo7KVnaMFU=
 tinygo.org/x/drivers v0.36.1-0.20261010154131-b620b0b7f928 h1:40/QjwtsoiqeumkRkwS+ZqTzxTUDz+Rv/rn2Uk+8g1g=
 tinygo.org/x/drivers v0.36.1-0.20261010154131-b620b0b7f928/go.mod h1:DQgKyHkB4G6IEOKVTAjApbKnWGwESN91EVJO+nMOE9Y=
 tinygo.org/x/tinyfont v0.7.0 h1:Ju901eGRThlHLoti9K7myMYyv4phd3I0DrJwc14NTTU=

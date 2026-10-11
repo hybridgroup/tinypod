@@ -13,6 +13,7 @@ import (
 	"github.com/hybridgroup/tinyplayer/pwm"
 	"github.com/hybridgroup/tinypod"
 	"tinygo.org/x/drivers/st7789"
+	"tinygo.org/x/drivers/ws2812"
 )
 
 const diskSize = 6 << 20
@@ -51,10 +52,12 @@ func main() {
 	}
 
 	err = tinypod.Run(tinypod.Config{
-		Display: &disp,
-		Theme:   theme,
-		Output:  out,
-		Storage: vol,
+		Display:  &disp,
+		Theme:    theme,
+		Output:   out,
+		Storage:  vol,
+		LED:      ws2812.NewWS2812(machine.WS2812),
+		LEDCount: 2,
 		Input: tinypod.Buttons(
 			tinypod.Button{Pressed: button(machine.BUTTON_UP), Press: tinypod.Up, Repeat: true},
 			tinypod.Button{Pressed: button(machine.BUTTON_DOWN), Press: tinypod.Down, Repeat: true},

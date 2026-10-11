@@ -447,7 +447,7 @@ func (f *fakeLED) WriteColors(buf []color.RGBA) error {
 func TestLight(t *testing.T) {
 	m := &meter{Output: fakeOutput{}}
 	led := &fakeLED{}
-	l := newLight(led, 4, m)
+	l := newLight(led, 4, true, m)
 	neg := func(v int16) uint32 { return uint32(uint16(v)) }
 	quiet := neg(-1000)
 	loud := neg(-32768)<<16 | quiet
@@ -477,5 +477,17 @@ func TestLight(t *testing.T) {
 	l.update(false)
 	if led.writes != n {
 		t.Fatal("wrote while off")
+	}
+}
+
+func TestLightSame(t *testing.T) {
+	m := &meter{Output: fakeOutput{}}
+	led := &fakeLED{}
+	l := newLight(led, 2, false, m)
+	m.WriteStereo([]uint32{uint32(uint16(4000))})
+	l.update(true)
+	c := led.last[0]
+	if led.last[1] != c || c.R|c.G|c.B == 0 {
+		t.Fatalf("LEDs differ or off: %v", led.last)
 	}
 }

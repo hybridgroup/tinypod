@@ -17,9 +17,11 @@ type Config struct {
 	Storage Storage
 	Input   Input
 
-	// LED is optional. The LEDs light up in time with the music.
+	// LED is optional. The LEDs light up in time with the music. They all
+	// show the same, or with LEDMeter they fill up like a level meter.
 	LED      WS2812
 	LEDCount int
+	LEDMeter bool
 
 	// ReadAhead reads songs into a 32 KB buffer in a separate goroutine.
 	// It helps when the display or the card blocks the CPU, as on the
@@ -45,7 +47,7 @@ func Run(c Config) error {
 	if c.LED != nil {
 		m := &meter{Output: out}
 		out = m
-		l = newLight(c.LED, c.LEDCount, m)
+		l = newLight(c.LED, c.LEDCount, c.LEDMeter, m)
 	}
 	d := newDeck(out, lib, c.ReadAhead)
 	a := newApp(newScreen(c.Display, c.Theme), c.Input, lib, d)

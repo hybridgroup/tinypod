@@ -9,8 +9,8 @@ import (
 	"machine/usb/msc"
 	"time"
 
-	"github.com/hybridgroup/tinypod"
 	"github.com/hybridgroup/tinyplayer/flashdisk"
+	"github.com/hybridgroup/tinypod"
 	pio "github.com/tinygo-org/pio/rp2-pio"
 	"github.com/tinygo-org/pio/rp2-pio/piolib"
 )
@@ -51,7 +51,7 @@ func main() {
 		Display: disp,
 		Theme:   theme,
 		Output:  out,
-		Volume:  vol,
+		Storage: vol,
 		Input: tinypod.Buttons(
 			tinypod.Button{Pressed: button(machine.GPIO10), Press: tinypod.Up, Repeat: true},
 			tinypod.Button{Pressed: button(machine.GPIO11), Press: tinypod.Down, Repeat: true},

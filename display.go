@@ -2,6 +2,8 @@ package tinypod
 
 import (
 	"image/color"
+	"strconv"
+	"time"
 
 	"tinygo.org/x/tinyfont"
 	"tinygo.org/x/tinyfont/notosans"
@@ -187,4 +189,150 @@ func Message(d Display, t Theme, lines ...string) {
 	}
 	s.clearFrom(len(lines))
 	s.show()
+}
+
+// playState is the icon in the title bar.
+type playState uint8
+
+const (
+	stopped playState = iota
+	playing
+	paused
+)
+
+func (s *screen) titleBar(t string, st playState) {
+	s.row(0, "T"+strconv.Itoa(int(st))+t, s.t.BG, func(top int16) {
+		size := s.ascent
+		x := s.w - size - 2
+		s.text(2, top, t, s.t.FG, x-2)
+		s.rect(0, s.titleH-1, s.w, 1, s.t.SelBG)
+		y := (s.titleH - 1 - size) / 2
+		switch st {
+		case paused:
+			bar := max(size/3, 1)
+			s.rect(x, y, bar, size, s.t.FG)
+			s.rect(x+size-bar, y, bar, size, s.t.FG)
+		case playing:
+			for c := int16(0); c <= size/2; c++ {
+				s.rect(x+c, y+c, 1, size-2*c, s.t.FG)
+			}
+		}
+	})
+}
+
+// menu draws a list with the selected row and a scroll bar. It moves m.top so
+// the selected row is on the screen.
+func (s *screen) menu(m *menu, st playState, usb bool) {
+	s.titleBar(m.title, st)
+	rows := s.rows() - 1
+	if len(m.items) == 0 {
+		lines := []string{"No songs"}
+		if usb {
+			lines = []string{"No songs.", "Copy WAV files", "to the USB drive."}
+		}
+		for i, l := range lines {
+			s.row(1+i, "E"+l, s.t.BG, func(top int16) { s.text(2, top, l, s.t.FG, s.w) })
+		}
+		s.clearFrom(1 + len(lines))
+		return
+	}
+	if m.sel < m.top {
+		m.top = m.sel
+	} else if m.sel >= m.top+rows {
+		m.top = m.sel - rows + 1
+	}
+	n := len(m.items)
+	ts, te := 0, rows
+	if n > rows {
+		ts = m.top * rows / n
+		te = max(ts+1, (m.top+rows)*rows/n)
+	}
+	for r := 0; r < rows && m.top+r < n; r++ {
+		i := m.top + r
+		sel := i == m.sel
+		thumb := n > rows && r >= ts && r < te
+		key := "M" + flag(sel) + flag(thumb) + m.items[i]
+		bg, fg := s.t.BG, s.t.FG
+		if sel {
+			bg, fg = s.t.SelBG, s.t.SelFG
+		}
+		s.row(1+r, key, bg, func(top int16) {
+			s.text(2, top, m.items[i], fg, s.w-6)
+			if thumb {
+				s.rect(s.w-3, top, 3, s.rowH, s.t.FG)
+			}
+		})
+	}
+	s.clearFrom(1 + min(rows, n-m.top))
+}
+
+// nowPlaying is what the Now Playing screen shows. song is empty when
+// nothing plays.
+type nowPlaying struct {
+	song           string
+	pos, n         int
+	state          playState
+	elapsed, total time.Duration
+	volume         int
+	showVolume     bool
+}
+
+func (s *screen) nowPlaying(np nowPlaying) {
+	s.titleBar("Now Playing", np.state)
+	if np.song == "" {
+		s.row(1, "NNothing playing", s.t.BG, func(top int16) {
+			s.text(2, top, "Nothing playing", s.t.FG, s.w)
+		})
+		s.clearFrom(2)
+		return
+	}
+	lines := [...]string{strconv.Itoa(np.pos+1) + " of " + strconv.Itoa(np.n), title(np.song), albumOf(np.song)}
+	for i, l := range lines {
+		s.row(1+i, "N"+l, s.t.BG, func(top int16) { s.text(2, top, l, s.t.FG, s.w) })
+	}
+
+	el, total := np.elapsed, np.total
+	barW := s.w - 4
+	fill := int16(0)
+	if total > 0 {
+		fill = int16(int64(barW) * int64(min(el, total)) / int64(total))
+	}
+	s.row(4, "B"+strconv.Itoa(int(fill)), s.t.BG, func(top int16) {
+		mid := top + s.rowH/2
+		s.rect(2, mid, barW, 1, s.t.FG)
+		s.rect(2, mid-1, fill, 3, s.t.SelBG)
+	})
+
+	if np.showVolume {
+		s.row(5, "V"+strconv.Itoa(np.volume), s.t.BG, func(top int16) {
+			x := s.width("Vol ") + 2
+			s.text(2, top, "Vol", s.t.FG, s.w)
+			s.rect(x, top+s.rowH/2-2, (s.w-x-2)*int16(np.volume)/256, 4, s.t.SelBG)
+		})
+	} else {
+		left, right := clock(el), "-"+clock(total-el)
+		s.row(5, "C"+left+right, s.t.BG, func(top int16) {
+			s.text(2, top, left, s.t.FG, s.w)
+			x := s.w - 2 - s.width(right)
+			s.text(x, top, right, s.t.FG, s.w)
+		})
+	}
+	s.clearFrom(6)
+}
+
+func flag(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
+// clock formats d as m:ss.
+func clock(d time.Duration) string {
+	sec := int(max(d, 0) / time.Second)
+	ss := strconv.Itoa(sec % 60)
+	if len(ss) < 2 {
+		ss = "0" + ss
+	}
+	return strconv.Itoa(sec/60) + ":" + ss
 }

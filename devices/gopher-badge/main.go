@@ -9,9 +9,9 @@ import (
 	"machine/usb/msc"
 	"time"
 
-	"github.com/hybridgroup/tinypod"
 	"github.com/hybridgroup/tinyplayer/flashdisk"
 	"github.com/hybridgroup/tinyplayer/pwm"
+	"github.com/hybridgroup/tinypod"
 	"tinygo.org/x/drivers/st7789"
 )
 
@@ -54,7 +54,7 @@ func main() {
 		Display: &disp,
 		Theme:   theme,
 		Output:  out,
-		Volume:  vol,
+		Storage: vol,
 		Input: tinypod.Buttons(
 			tinypod.Button{Pressed: button(machine.BUTTON_UP), Press: tinypod.Up, Repeat: true},
 			tinypod.Button{Pressed: button(machine.BUTTON_DOWN), Press: tinypod.Down, Repeat: true},

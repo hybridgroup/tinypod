@@ -48,7 +48,7 @@ func main() {
 		Display:   disp,
 		Theme:     theme,
 		Output:    out,
-		Volume:    vol,
+		Storage:   vol,
 		Input:     in,
 		ReadAhead: readAhead,
 	})

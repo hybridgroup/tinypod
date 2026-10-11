@@ -7,16 +7,21 @@ import (
 	"time"
 
 	"github.com/hybridgroup/tinyplayer"
-	"github.com/soypat/fat"
 )
 
-// deck plays a queue of songs in its own goroutine.
+const (
+	volumeStep    = 16
+	volumeDefault = 160
+)
+
+// deck plays a queue of songs from the library in its own goroutine.
 type deck struct {
 	player    *tinyplayer.Player
-	fs        *fat.FS
+	lib       *library
 	readAhead bool
 	wake      chan struct{}
-	f         fat.File
+	f         io.ReadCloser
+	vol       int
 	ahead     *ahead
 	cut       atomic.Bool
 	idle      atomic.Bool
@@ -28,8 +33,9 @@ type deck struct {
 	active bool
 }
 
-func newDeck(player *tinyplayer.Player, fs *fat.FS, readAhead bool) *deck {
-	d := &deck{player: player, fs: fs, readAhead: readAhead, wake: make(chan struct{}, 1), jump: -1}
+func newDeck(out tinyplayer.Output, lib *library, readAhead bool) *deck {
+	d := &deck{player: tinyplayer.New(out), lib: lib, readAhead: readAhead, wake: make(chan struct{}, 1), jump: -1}
+	d.setVolume(volumeDefault)
 	if readAhead {
 		d.ahead = &ahead{}
 	}
@@ -95,6 +101,35 @@ func (d *deck) togglePause() {
 	d.player.Pause(!d.player.Paused())
 }
 
+// previous goes to the start of the song, or to the song before in the first
+// 3 seconds.
+func (d *deck) previous() {
+	if el, _ := d.player.Progress(); el > 3*time.Second {
+		d.skip(0)
+	} else {
+		d.skip(-1)
+	}
+}
+
+func (d *deck) paused() bool {
+	return d.player.Paused()
+}
+
+// progress returns the elapsed and total time of the song.
+func (d *deck) progress() (elapsed, total time.Duration) {
+	return d.player.Progress()
+}
+
+func (d *deck) volume() int {
+	return d.vol
+}
+
+// setVolume sets the volume from 0 to 256.
+func (d *deck) setVolume(v int) {
+	d.vol = max(0, min(256, v))
+	d.player.SetVolume(d.vol)
+}
+
 // current returns the song that is playing, its place in the queue, and the
 // queue length. The song is empty when nothing plays.
 func (d *deck) current() (song string, pos, n int) {
@@ -136,11 +171,13 @@ func (d *deck) run() {
 		song := d.queue[d.pos]
 		d.mu.Unlock()
 
-		if err := d.fs.OpenFile(&d.f, song, fat.ModeRead); err != nil {
+		f, err := d.lib.open(song)
+		if err != nil {
 			println("open", song, err.Error())
 		} else {
+			d.f = f
 			if d.readAhead {
-				d.ahead.start(&d.f)
+				d.ahead.start(f)
 			}
 			if err := d.player.Play(d); err != nil && !d.cut.Load() {
 				println("play", song, err.Error())

@@ -17,6 +17,10 @@ type Config struct {
 	Storage Storage
 	Input   Input
 
+	// LED is optional. The LEDs light up in time with the music.
+	LED      WS2812
+	LEDCount int
+
 	// ReadAhead reads songs into a 32 KB buffer in a separate goroutine.
 	// It helps when the display or the card blocks the CPU, as on the
 	// ESP32-C3. Leave it off with piolib I2S, which queues one DMA buffer.
@@ -36,8 +40,17 @@ func Run(c Config) error {
 	}
 	waitSplash()
 	println("songs:", len(lib.songs), "albums:", len(lib.albums))
-	d := newDeck(c.Output, lib, c.ReadAhead)
-	newApp(newScreen(c.Display, c.Theme), c.Input, lib, d).run()
+	out := c.Output
+	var l *light
+	if c.LED != nil {
+		m := &meter{Output: out}
+		out = m
+		l = newLight(c.LED, c.LEDCount, m)
+	}
+	d := newDeck(out, lib, c.ReadAhead)
+	a := newApp(newScreen(c.Display, c.Theme), c.Input, lib, d)
+	a.light = l
+	a.run()
 	return nil
 }
 

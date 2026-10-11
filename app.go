@@ -25,6 +25,7 @@ type app struct {
 	in         Input
 	lib        *library
 	deck       *deck
+	light      *light
 	stack      []*menu
 	nowPlaying bool
 	volumeAt   time.Time
@@ -112,6 +113,9 @@ func (a *app) step() {
 	if song != a.lastSong || paused != a.lastPaused {
 		a.lastSong, a.lastPaused = song, paused
 		a.dirty = true
+	}
+	if a.light != nil {
+		a.light.update(song != "" && !paused)
 	}
 	if a.nowPlaying {
 		el, _ := a.deck.progress()

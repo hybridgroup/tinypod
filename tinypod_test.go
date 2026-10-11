@@ -432,3 +432,50 @@ func waitSong(t *testing.T, d *deck, want string) {
 	song, _, _ := d.current()
 	t.Fatalf("playing %q, want %q", song, want)
 }
+
+type fakeLED struct {
+	last   []color.RGBA
+	writes int
+}
+
+func (f *fakeLED) WriteColors(buf []color.RGBA) error {
+	f.last = append(f.last[:0], buf...)
+	f.writes++
+	return nil
+}
+
+func TestLight(t *testing.T) {
+	m := &meter{Output: fakeOutput{}}
+	led := &fakeLED{}
+	l := newLight(led, 4, m)
+	neg := func(v int16) uint32 { return uint32(uint16(v)) }
+	quiet := neg(-1000)
+	loud := neg(-32768)<<16 | quiet
+	m.WriteStereo([]uint32{loud, quiet})
+	if p := m.peak.Load(); p != 32768 {
+		t.Fatalf("peak %d", p)
+	}
+	l.update(true)
+	if m.peak.Load() != 0 {
+		t.Fatal("peak not reset")
+	}
+	for i, c := range led.last {
+		if c.R == 0 && c.G == 0 && c.B == 0 {
+			t.Fatalf("LED %d off at full level", i)
+		}
+	}
+	m.WriteStereo([]uint32{loud})
+	for i := 0; i < 100; i++ {
+		l.update(false)
+	}
+	for i, c := range led.last {
+		if c.R != 0 || c.G != 0 || c.B != 0 {
+			t.Fatalf("LED %d on when paused: %v", i, c)
+		}
+	}
+	n := led.writes
+	l.update(false)
+	if led.writes != n {
+		t.Fatal("wrote while off")
+	}
+}

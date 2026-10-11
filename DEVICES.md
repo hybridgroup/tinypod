@@ -49,6 +49,8 @@ With no gamepad, the expansion board button does everything. It acts when you re
 
 tinypod looks for the gamepad only at start. To change from one input to the other, reset the board.
 
+On the xiao-rp2350 the RGB LED on the board lights up in time with the music. It needs no wiring. The xiao-esp32c3 has no RGB LED.
+
 ## pico2-ssd1306
 
 Folder `devices/pico2-ssd1306`.
@@ -105,6 +107,16 @@ Buttons. Connect one leg of each button to its pin and the other leg to GND. The
 
 The I2C pins are not the default GPIO4 and GPIO5, because GPIO4 is the I2S WSEL pin.
 
+Optional WS2812 strip. It lights up in time with the music. `ledCount` in `main.go` is the number of LEDs, 22 by default.
+
+| Strip pin | Pico 2 | Physical pin |
+|---|---|---|
+| GND | GND | 38 |
+| 5V | VBUS | 40 |
+| DIN | GPIO15 | 20 |
+
+Connect GND first and change the wiring only with the power off. Put a 300 to 500 ohm resistor on DIN and a 1000 µF capacitor across 5V and GND, see "Best Practices" in the [Adafruit NeoPixel Überguide](https://learn.adafruit.com/adafruit-neopixel-uberguide/best-practices). For long strips use a separate 5V supply and connect its GND to the Pico 2 GND.
+
 If the computer does not see the Pico 2 at all, hold BOOTSEL while you plug in the USB cable. A drive named RP2350 shows up and `tinygo flash` can write to it.
 
 ## gopher-badge
@@ -130,10 +142,12 @@ Write a main that sets up the hardware and fills a `tinypod.Config`:
 
 ```go
 err := tinypod.Run(tinypod.Config{
-	Display: disp,                // any driver with Size, SetPixel and Display
-	Theme:   tinypod.MonoTheme(), // or ColorTheme, or your own font and colors
-	Output:  out,                 // I2S or pwm.PWM
-	Storage: vol,                 // from MountSD or MountFlash
+	Display:  disp,                // any driver with Size, SetPixel and Display
+	Theme:    tinypod.MonoTheme(), // or ColorTheme, or your own font and colors
+	Output:   out,                 // I2S or pwm.PWM
+	Storage:  vol,                 // from MountSD or MountFlash
+	LED:      leds,                // optional, such as ws2812.Device
+	LEDCount: 10,
 	Input: tinypod.Buttons(
 		tinypod.Button{Pressed: up, Press: tinypod.Up, Repeat: true},
 		tinypod.Button{Pressed: sel, Press: tinypod.Select, Hold: tinypod.PlayPause},
@@ -145,4 +159,5 @@ err := tinypod.Run(tinypod.Config{
 - Theme: the layout comes from the display size and the font. `MonoTheme` uses an 8 point font for small screens. `ColorTheme` uses Noto Sans 12 point.
 - Storage: `MountSD` needs the SPI bus at 400 kHz and a function that raises the clock after setup. `MountFlash` takes a tinyplayer `flashdisk.Disk`. Call `msc.Port(disk)` before `machine.USBDev.Configure` so it shows up as a USB drive.
 - Input: `Buttons` for buttons, `HoldButton` for one button, `Gamepad` for the Gamepad QT with a `GamepadMap`, and `Inputs` to use several at once. `Pressed` is a function, so a button can come from a pin, an I/O expander or a touch pad.
+- LED: optional WS2812 LEDs that light up in time with the music. One LED gets brighter with the level and a strip fills up like a level meter. On the RP2040 and RP2350 create it after the I2S output, so I2S gets its PIO state machine first.
 - ReadAhead: set it if the display or the storage holds the CPU for long, as on the ESP32-C3. See [Read ahead](#read-ahead).

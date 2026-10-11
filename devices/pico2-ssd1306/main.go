@@ -13,9 +13,13 @@ import (
 	"github.com/hybridgroup/tinypod"
 	pio "github.com/tinygo-org/pio/rp2-pio"
 	"github.com/tinygo-org/pio/rp2-pio/piolib"
+	"tinygo.org/x/drivers/ws2812"
 )
 
-const diskSize = 3 << 20
+const (
+	diskSize = 3 << 20
+	ledCount = 22
+)
 
 func main() {
 	// MSC replaces the USB descriptor, so it must be set up before the host
@@ -46,12 +50,15 @@ func main() {
 	if err != nil {
 		tinypod.Fail(disp, theme, "no audio", err)
 	}
+	leds := ws2812.NewWS2812(machine.GPIO15)
 
 	err = tinypod.Run(tinypod.Config{
-		Display: disp,
-		Theme:   theme,
-		Output:  out,
-		Storage: vol,
+		Display:  disp,
+		Theme:    theme,
+		Output:   out,
+		Storage:  vol,
+		LED:      leds,
+		LEDCount: ledCount,
 		Input: tinypod.Buttons(
 			tinypod.Button{Pressed: button(machine.GPIO10), Press: tinypod.Up, Repeat: true},
 			tinypod.Button{Pressed: button(machine.GPIO11), Press: tinypod.Down, Repeat: true},

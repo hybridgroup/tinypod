@@ -1,5 +1,7 @@
 # tinypod
 
+<img src="images/logo.svg" alt="tinypod logo" width="160">
+
 tinypod is an iPod classic style music player. It plays WAV files and shows Songs, Albums, Shuffle Songs and Now Playing menus.
 
 tinypod uses [tinyplayer](https://github.com/hybridgroup/tinyplayer) to play the audio, and [TinyGo](https://tinygo.org) to run on microcontrollers.

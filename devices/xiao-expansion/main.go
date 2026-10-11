@@ -29,6 +29,7 @@ func main() {
 	if err != nil {
 		tinypod.Fail(disp, theme, "no audio", err)
 	}
+	leds, ledCount := led()
 
 	vol, err := mountCard()
 	if err != nil {
@@ -50,6 +51,8 @@ func main() {
 		Output:    out,
 		Storage:   vol,
 		Input:     in,
+		LED:       leds,
+		LEDCount:  ledCount,
 		ReadAhead: readAhead,
 	})
 	tinypod.Fail(disp, theme, "scan failed", err)

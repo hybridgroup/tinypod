@@ -6,8 +6,10 @@ import (
 	"machine"
 
 	"github.com/hybridgroup/tinyplayer"
+	"github.com/hybridgroup/tinypod"
 	pio "github.com/tinygo-org/pio/rp2-pio"
 	"github.com/tinygo-org/pio/rp2-pio/piolib"
+	"tinygo.org/x/drivers/ws2812"
 )
 
 var (
@@ -30,4 +32,13 @@ func audioOutput() (tinyplayer.Output, error) {
 		return nil, err
 	}
 	return i2s, i2s.SetSampleFrequency(44100)
+}
+
+// led is the RGB LED on the board. Call it after audioOutput so I2S gets its
+// PIO state machine first.
+func led() (tinypod.WS2812, int) {
+	power := machine.NEOPIXEL_POWER
+	power.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	power.High()
+	return ws2812.NewWS2812(machine.WS2812), 1
 }

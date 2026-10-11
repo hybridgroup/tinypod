@@ -6,6 +6,7 @@ import (
 	"machine"
 
 	"github.com/hybridgroup/tinyplayer"
+	"github.com/hybridgroup/tinypod"
 )
 
 var (
@@ -26,4 +27,9 @@ func audioOutput() (tinyplayer.Output, error) {
 		Stereo:         true,
 	})
 	return &machine.I2S0, err
+}
+
+// led returns nothing because the xiao-esp32c3 has no RGB LED.
+func led() (tinypod.WS2812, int) {
+	return nil, 0
 }

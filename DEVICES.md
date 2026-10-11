@@ -136,6 +136,8 @@ The gopher badge needs no wiring. tinypod uses the 320x240 color screen, the six
 
 The speaker plays mono audio through the `pwm` package.
 
+The two LEDs on the badge light up in time with the music.
+
 ## Add a device
 
 Write a main that sets up the hardware and fills a `tinypod.Config`:
@@ -148,6 +150,7 @@ err := tinypod.Run(tinypod.Config{
 	Storage:  vol,                 // from MountSD or MountFlash
 	LED:      leds,                // optional, such as ws2812.Device
 	LEDCount: 10,
+	LEDMeter: true,                // fill up like a level meter
 	Input: tinypod.Buttons(
 		tinypod.Button{Pressed: up, Press: tinypod.Up, Repeat: true},
 		tinypod.Button{Pressed: sel, Press: tinypod.Select, Hold: tinypod.PlayPause},
@@ -159,5 +162,5 @@ err := tinypod.Run(tinypod.Config{
 - Theme: the layout comes from the display size and the font. `MonoTheme` uses an 8 point font for small screens. `ColorTheme` uses Noto Sans 12 point.
 - Storage: `MountSD` needs the SPI bus at 400 kHz and a function that raises the clock after setup. `MountFlash` takes a tinyplayer `flashdisk.Disk`. Call `msc.Port(disk)` before `machine.USBDev.Configure` so it shows up as a USB drive.
 - Input: `Buttons` for buttons, `HoldButton` for one button, `Gamepad` for the Gamepad QT with a `GamepadMap`, and `Inputs` to use several at once. `Pressed` is a function, so a button can come from a pin, an I/O expander or a touch pad.
-- LED: optional WS2812 LEDs that light up in time with the music. One LED gets brighter with the level and a strip fills up like a level meter. On the RP2040 and RP2350 create it after the I2S output, so I2S gets its PIO state machine first.
+- LED: optional WS2812 LEDs that light up in time with the music. All LEDs get brighter with the level, or with `LEDMeter` they fill up like a level meter. On the RP2040 and RP2350 create it after the I2S output, so I2S gets its PIO state machine first.
 - ReadAhead: set it if the display or the storage holds the CPU for long, as on the ESP32-C3. See [Read ahead](#read-ahead).

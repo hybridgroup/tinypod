@@ -59,6 +59,7 @@ func main() {
 		Storage:  vol,
 		LED:      leds,
 		LEDCount: ledCount,
+		LEDMeter: true,
 		Input: tinypod.Buttons(
 			tinypod.Button{Pressed: button(machine.GPIO10), Press: tinypod.Up, Repeat: true},
 			tinypod.Button{Pressed: button(machine.GPIO11), Press: tinypod.Down, Repeat: true},

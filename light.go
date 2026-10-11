@@ -55,10 +55,11 @@ const (
 	lightDecay = 7
 )
 
-// light shows the music level on the LEDs. One LED gets brighter with the
-// level. A strip fills up like a level meter. The color slowly changes.
+// light shows the music level on the LEDs. The LEDs get brighter with the
+// level, or fill up like a level meter. The color slowly changes.
 type light struct {
 	led   WS2812
+	bar   bool
 	m     *meter
 	buf   []color.RGBA
 	level int
@@ -66,8 +67,8 @@ type light struct {
 	off   bool
 }
 
-func newLight(led WS2812, n int, m *meter) *light {
-	return &light{led: led, m: m, buf: make([]color.RGBA, max(n, 1))}
+func newLight(led WS2812, n int, bar bool, m *meter) *light {
+	return &light{led: led, bar: bar, m: m, buf: make([]color.RGBA, max(n, 1))}
 }
 
 // update follows the level when on is true, and fades out when it is false.
@@ -94,7 +95,10 @@ func (l *light) update(on bool) {
 	c := wheel(l.hue)
 	n := len(l.buf)
 	for i := range l.buf {
-		b := min(max(l.level*n-i*255, 0), 255) * lightMax / 255
+		b := l.level * lightMax / 255
+		if l.bar {
+			b = min(max(l.level*n-i*255, 0), 255) * lightMax / 255
+		}
 		l.buf[i] = color.RGBA{uint8(int(c.R) * b / 255), uint8(int(c.G) * b / 255), uint8(int(c.B) * b / 255), 255}
 	}
 	l.led.WriteColors(l.buf)

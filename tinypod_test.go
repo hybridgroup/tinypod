@@ -1,8 +1,8 @@
 package tinypod
 
 import (
+	"encoding/binary"
 	"image/color"
-	"os"
 	"slices"
 	"testing"
 	"time"
@@ -49,10 +49,7 @@ func newFlash(t *testing.T) (*flashdisk.Disk, *Volume) {
 
 func writeSongs(t *testing.T, vol *Volume, paths ...string) {
 	t.Helper()
-	data, err := os.ReadFile("../../wav/testdata/mono_s16_list.wav")
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := testWAV(4000)
 	for _, p := range paths {
 		for i := 1; i < len(p); i++ {
 			if p[i] == '/' {
@@ -63,6 +60,28 @@ func writeSongs(t *testing.T, vol *Volume, paths ...string) {
 			t.Fatalf("write %s: %v", p, err)
 		}
 	}
+}
+
+// testWAV returns a 16 kHz mono 16 bit PCM WAV file with n samples of a ramp.
+func testWAV(n int) []byte {
+	le := binary.LittleEndian
+	b := make([]byte, 44+2*n)
+	copy(b, "RIFF")
+	le.PutUint32(b[4:], uint32(36+2*n))
+	copy(b[8:], "WAVEfmt ")
+	le.PutUint32(b[16:], 16)
+	le.PutUint16(b[20:], 1)
+	le.PutUint16(b[22:], 1)
+	le.PutUint32(b[24:], 16000)
+	le.PutUint32(b[28:], 32000)
+	le.PutUint16(b[32:], 2)
+	le.PutUint16(b[34:], 16)
+	copy(b[36:], "data")
+	le.PutUint32(b[40:], uint32(2*n))
+	for i := 0; i < n; i++ {
+		le.PutUint16(b[44+2*i:], uint16(i*8))
+	}
+	return b
 }
 
 func TestScan(t *testing.T) {

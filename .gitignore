@@ -1,0 +1,11 @@
+# TinyGo build output
+*.bin
+*.elf
+*.hex
+*.uf2
+*.wasm
+*.zip
+
+# Go test output
+*.test
+*.out

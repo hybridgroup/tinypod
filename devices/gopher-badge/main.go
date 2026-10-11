@@ -9,7 +9,7 @@ import (
 	"machine/usb/msc"
 	"time"
 
-	"github.com/hybridgroup/tinyplayer/examples/tinypod"
+	"github.com/hybridgroup/tinypod"
 	"github.com/hybridgroup/tinyplayer/flashdisk"
 	"github.com/hybridgroup/tinyplayer/pwm"
 	"tinygo.org/x/drivers/st7789"

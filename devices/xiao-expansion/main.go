@@ -9,7 +9,7 @@ import (
 	"machine"
 	"time"
 
-	"github.com/hybridgroup/tinyplayer/examples/tinypod"
+	"github.com/hybridgroup/tinypod"
 )
 
 func main() {

@@ -9,7 +9,7 @@ import (
 	"machine/usb/msc"
 	"time"
 
-	"github.com/hybridgroup/tinyplayer/examples/tinypod"
+	"github.com/hybridgroup/tinypod"
 	"github.com/hybridgroup/tinyplayer/flashdisk"
 	pio "github.com/tinygo-org/pio/rp2-pio"
 	"github.com/tinygo-org/pio/rp2-pio/piolib"

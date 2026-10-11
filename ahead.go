@@ -5,8 +5,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"time"
-
-	"github.com/soypat/fat"
 )
 
 const (
@@ -14,7 +12,7 @@ const (
 	aheadChunk = 2048
 )
 
-// ahead reads a file into a ring buffer in its own goroutine, so slow SD reads
+// ahead reads a song into a ring buffer in its own goroutine, so slow SD reads
 // and screen updates do not starve the audio output.
 type ahead struct {
 	buf  [aheadSize]byte
@@ -24,7 +22,7 @@ type ahead struct {
 	err  error
 }
 
-func (a *ahead) start(f *fat.File) {
+func (a *ahead) start(f io.Reader) {
 	a.r.Store(0)
 	a.w.Store(0)
 	a.done.Store(false)
@@ -41,7 +39,7 @@ func (a *ahead) halt() {
 	}
 }
 
-func (a *ahead) fill(f *fat.File) {
+func (a *ahead) fill(f io.Reader) {
 	defer a.done.Store(true)
 	for !a.stop.Load() {
 		w := a.w.Load()

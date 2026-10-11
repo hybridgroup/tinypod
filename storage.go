@@ -1,6 +1,9 @@
 package tinypod
 
 import (
+	"io"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/hybridgroup/tinyplayer/flashdisk"
@@ -10,11 +13,27 @@ import (
 	"tinygo.org/x/drivers/sd"
 )
 
-// Volume is the FAT volume that holds the songs.
+// Storage holds the songs. The Library finds songs with List and the Deck
+// reads them with Open.
+type Storage interface {
+	// List returns the sorted WAV paths and folder names in dir. The root is "".
+	List(dir string) (songs, dirs []string, err error)
+	// Open opens a song. Only one song is open at a time.
+	Open(path string) (io.ReadCloser, error)
+	// Changed reports true once after new songs were copied to the storage.
+	Changed() bool
+	// Reload makes the storage ready to read again after Changed.
+	Reload() error
+	// USB reports if songs are copied to the storage over USB.
+	USB() bool
+}
+
+// Volume is a FAT volume on an SD card or in flash.
 type Volume struct {
 	fs    *fat.FS
 	flash *storage.Volume
 	disk  *flashdisk.Disk
+	file  fat.File
 
 	last    uint32
 	changed time.Time
@@ -51,16 +70,49 @@ func MountFlash(disk *flashdisk.Disk) (*Volume, error) {
 	return &Volume{fs: &vol.FS, flash: vol, disk: disk, last: disk.Changed()}, nil
 }
 
-// USB reports if songs are copied to the volume over USB.
+func (v *Volume) List(dir string) (songs, dirs []string, err error) {
+	var d fat.Dir
+	path := dir
+	if path == "" {
+		path = "/"
+	}
+	if err := v.fs.OpenDir(&d, path); err != nil {
+		return nil, nil, err
+	}
+	defer d.Close()
+	err = d.ForEachFile(func(fi *fat.FileInfo) error {
+		name := fi.Name()
+		switch {
+		case strings.HasPrefix(name, "."):
+		case fi.IsDir():
+			dirs = append(dirs, name)
+		case strings.HasSuffix(strings.ToLower(name), ".wav"):
+			songs = append(songs, dir+"/"+name)
+		}
+		return nil
+	})
+	slices.Sort(songs)
+	slices.Sort(dirs)
+	return songs, dirs, err
+}
+
+// Open reuses one fat.File so playing a song does not allocate.
+func (v *Volume) Open(path string) (io.ReadCloser, error) {
+	if err := v.fs.OpenFile(&v.file, path, fat.ModeRead); err != nil {
+		return nil, err
+	}
+	return &v.file, nil
+}
+
 func (v *Volume) USB() bool {
 	return v.disk != nil
 }
 
 const settleTime = time.Second
 
-// settled reports true once after the USB host wrote to the disk and then
+// Changed reports true once after the USB host wrote to the disk and then
 // stopped for a second.
-func (v *Volume) settled() bool {
+func (v *Volume) Changed() bool {
 	if v.disk == nil {
 		return false
 	}
@@ -77,8 +129,11 @@ func (v *Volume) settled() bool {
 	return true
 }
 
-// reload writes cached sectors and mounts the volume again.
-func (v *Volume) reload() error {
+// Reload writes cached sectors and mounts the volume again.
+func (v *Volume) Reload() error {
+	if v.disk == nil {
+		return nil
+	}
 	if err := v.disk.Sync(); err != nil {
 		return err
 	}

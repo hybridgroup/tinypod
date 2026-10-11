@@ -210,7 +210,7 @@ err := tinypod.Run(tinypod.Config{
 	Display: disp,                // any driver with Size, SetPixel and Display
 	Theme:   tinypod.MonoTheme(), // or ColorTheme, or your own font and colors
 	Output:  out,                 // I2S or pwm.PWM
-	Volume:  vol,                 // from MountSD or MountFlash
+	Storage: vol,                 // from MountSD or MountFlash
 	Input: tinypod.Buttons(
 		tinypod.Button{Pressed: up, Press: tinypod.Up, Repeat: true},
 		tinypod.Button{Pressed: sel, Press: tinypod.Select, Hold: tinypod.PlayPause},
@@ -220,7 +220,7 @@ err := tinypod.Run(tinypod.Config{
 
 - Display: tinypod uses `FillRectangle` too if the driver has it. For an SSD1306 on I2C use `tinypod.NewSSD1306`, see [Screen](#screen).
 - Theme: the layout comes from the display size and the font. `MonoTheme` uses an 8 point font for small screens. `ColorTheme` uses Noto Sans 12 point.
-- Volume: `MountSD` needs the SPI bus at 400 kHz and a function that raises the clock after setup. `MountFlash` takes a tinyplayer `flashdisk.Disk`. Call `msc.Port(disk)` before `machine.USBDev.Configure` so it shows up as a USB drive.
+- Storage: `MountSD` needs the SPI bus at 400 kHz and a function that raises the clock after setup. `MountFlash` takes a tinyplayer `flashdisk.Disk`. Call `msc.Port(disk)` before `machine.USBDev.Configure` so it shows up as a USB drive.
 - Input: `Buttons` for buttons, `HoldButton` for one button, `Gamepad` for the Gamepad QT with a `GamepadMap`, and `Inputs` to use several at once. `Pressed` is a function, so a button can come from a pin, an I/O expander or a touch pad.
 - ReadAhead: set it if the display or the storage holds the CPU for long, as on the ESP32-C3. See [Read ahead](#read-ahead).
 
@@ -229,16 +229,18 @@ err := tinypod.Run(tinypod.Config{
 tinypod consists of four main subsystems:
 
 - Display
-Display shows what is going on to the user of the tinypod.
+Display shows what is going on to the user of the tinypod. See `display.go` and `splash.go`.
 
 - Input
-Input reads whatever buttons are connected so that the user can operate the tinypod.
+Input reads whatever buttons are connected so that the user can operate the tinypod. See `input.go`.
 
 - Library
-Library provides access to the actual music on the tinypod. It uses the Storage interface to be able to find albums anbd songs on SD card or flash memory.
+Library provides access to the actual music on the tinypod. It uses the Storage interface to be able to find albums and songs on SD card or flash memory. See `library.go` and `storage.go`.
 
 - Deck
-Deck is what actually plays back the music so the user can hear it.
+Deck is what actually plays back the music so the user can hear it. See `deck.go`.
+
+`app.go` connects them. It reads events from Input, runs the menus, tells Deck what to play from Library, and draws on Display.
 
 ## Known issues
 

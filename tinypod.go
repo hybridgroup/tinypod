@@ -14,7 +14,7 @@ type Config struct {
 	Display Display
 	Theme   Theme
 	Output  tinyplayer.Output
-	Volume  *Volume
+	Storage Storage
 	Input   Input
 
 	// ReadAhead reads songs into a 32 KB buffer in a separate goroutine.
@@ -30,15 +30,14 @@ func Run(c Config) error {
 	if splashAt.IsZero() {
 		Splash(c.Display, c.Theme)
 	}
-	lib, err := scan(c.Volume.fs)
+	lib, err := newLibrary(c.Storage)
 	if err != nil {
 		return err
 	}
 	waitSplash()
 	println("songs:", len(lib.songs), "albums:", len(lib.albums))
-	player := tinyplayer.New(c.Output)
-	d := newDeck(player, c.Volume.fs, c.ReadAhead)
-	newApp(newScreen(c.Display, c.Theme), c.Volume, lib, d, player, c.Input).run()
+	d := newDeck(c.Output, lib, c.ReadAhead)
+	newApp(newScreen(c.Display, c.Theme), c.Input, lib, d).run()
 	return nil
 }
 

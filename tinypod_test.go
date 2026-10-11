@@ -2,12 +2,14 @@ package tinypod
 
 import (
 	"encoding/binary"
+	"errors"
 	"image/color"
+	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/hybridgroup/tinyplayer"
 	"github.com/hybridgroup/tinyplayer/flashdisk"
 )
 
@@ -93,7 +95,7 @@ func TestScan(t *testing.T) {
 		"/Music/Alpha/Disc 1/a.wav",
 		"/Music/Empty/notes.txt",
 	)
-	lib, err := scan(vol.fs)
+	lib, err := newLibrary(vol)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,12 +124,53 @@ func TestScan(t *testing.T) {
 func TestScanRoot(t *testing.T) {
 	_, vol := newFlash(t)
 	writeSongs(t, vol, "/x.wav", "/Band/y.wav")
-	lib, err := scan(vol.fs)
+	lib, err := newLibrary(vol)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(lib.songs) != 2 || len(lib.albums) != 1 || lib.albums[0].name != "Band" {
 		t.Fatalf("songs %v albums %d", lib.songs, len(lib.albums))
+	}
+}
+
+// fakeStorage holds song paths with no data, to test the library alone.
+type fakeStorage []string
+
+func (fs fakeStorage) List(dir string) (songs, dirs []string, err error) {
+	found := false
+	for _, p := range fs {
+		rest, ok := strings.CutPrefix(p, dir+"/")
+		if !ok {
+			continue
+		}
+		found = true
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			if !slices.Contains(dirs, rest[:i]) {
+				dirs = append(dirs, rest[:i])
+			}
+		} else {
+			songs = append(songs, p)
+		}
+	}
+	if !found && dir != "" {
+		return nil, nil, errors.New("not found")
+	}
+	slices.Sort(songs)
+	slices.Sort(dirs)
+	return songs, dirs, nil
+}
+func (fakeStorage) Open(string) (io.ReadCloser, error) { return nil, errors.New("no data") }
+func (fakeStorage) Changed() bool                      { return false }
+func (fakeStorage) Reload() error                      { return nil }
+func (fakeStorage) USB() bool                          { return false }
+
+func TestLibraryStorage(t *testing.T) {
+	lib, err := newLibrary(fakeStorage{"/Music/B/b.wav", "/Music/A/a.wav", "/Music/c.wav"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lib.albums) != 2 || lib.albums[0].name != "A" || !slices.Equal(lib.songs, []string{"/Music/A/a.wav", "/Music/B/b.wav", "/Music/c.wav"}) {
+		t.Fatalf("albums %v songs %v", lib.albums, lib.songs)
 	}
 }
 
@@ -288,23 +331,23 @@ func TestHoldButton(t *testing.T) {
 func TestSettled(t *testing.T) {
 	c := useClock(t)
 	disk, vol := newFlash(t)
-	if vol.settled() {
+	if vol.Changed() {
 		t.Fatal("settled with no writes")
 	}
 	var b [512]byte
 	disk.WriteBlocks(b[:], 10)
-	if vol.settled() {
+	if vol.Changed() {
 		t.Fatal("settled right after a write")
 	}
 	c.add(500 * time.Millisecond)
-	if vol.settled() {
+	if vol.Changed() {
 		t.Fatal("settled too early")
 	}
 	c.add(time.Second)
-	if !vol.settled() {
+	if !vol.Changed() {
 		t.Fatal("not settled")
 	}
-	if vol.settled() {
+	if vol.Changed() {
 		t.Fatal("settled twice")
 	}
 }
@@ -332,14 +375,13 @@ func (s *script) Poll() Event {
 func TestUI(t *testing.T) {
 	_, vol := newFlash(t)
 	writeSongs(t, vol, "/Music/A/one.wav", "/Music/A/two.wav", "/Music/B/three.wav")
-	lib, err := scan(vol.fs)
+	lib, err := newLibrary(vol)
 	if err != nil {
 		t.Fatal(err)
 	}
-	player := tinyplayer.New(fakeOutput{})
-	d := newDeck(player, vol.fs, true)
+	d := newDeck(fakeOutput{}, lib, true)
 	in := &script{}
-	a := newApp(newScreen(newFakeDisplay(128, 64), MonoTheme()), vol, lib, d, player, in)
+	a := newApp(newScreen(newFakeDisplay(128, 64), MonoTheme()), in, lib, d)
 	run := func(evs ...Event) {
 		*in = append(*in, evs...)
 		for len(*in) > 0 {
@@ -362,11 +404,11 @@ func TestUI(t *testing.T) {
 	waitSong(t, d, "/Music/A/two.wav")
 
 	run(Up)
-	if a.volume != volumeDefault+volumeStep {
-		t.Fatalf("volume %d", a.volume)
+	if d.volume() != volumeDefault+volumeStep {
+		t.Fatalf("volume %d", d.volume())
 	}
 	run(Select)
-	if !player.Paused() {
+	if !d.paused() {
 		t.Fatal("not paused")
 	}
 	run(Select, Back, Back, Back)

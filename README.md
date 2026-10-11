@@ -2,11 +2,11 @@
 
 <img src="images/logo.svg" alt="tinypod logo" width="160">
 
-tinypod is an iPod classic style music player. It plays WAV files and shows Songs, Albums, Shuffle Songs and Now Playing menus.
+tinypod is an iPod classic style music player that runs on real hardware using [TinyGo](https://tinygo.org). 
 
-tinypod uses [tinyplayer](https://github.com/hybridgroup/tinyplayer) to play the audio, and [TinyGo](https://tinygo.org) to run on microcontrollers.
+tinypod uses [tinyplayer](https://github.com/hybridgroup/tinyplayer) to play audio using WAV files. It works with several different displays, can play songs on an SD card or in flash, and can use a configurable set of buttons based on your specific needs.
 
-The `tinypod` package at the root of this repo has no hardware code. It works with any display, songs on an SD card or in flash, and any set of buttons. A small main for each device sets up the hardware and calls `tinypod.Run`.
+Here are a few built-in configurations:
 
 | Device | Folder | Display | Songs | Input | Audio |
 |---|---|---|---|---|---|
@@ -23,7 +23,7 @@ tinygo flash -tags fat_noexfat -target=pico2 ./devices/pico2-ssd1306
 tinygo flash -tags fat_noexfat -target=gopher-badge ./devices/gopher-badge
 ```
 
-At start the screen shows "starting" and then "reading songs". The serial output shows the number of songs and albums. If something fails, the screen shows the error.
+The serial output shows the number of songs and albums discovered by tinypod.
 
 ## Songs
 
@@ -62,7 +62,7 @@ On boards with songs in flash, the board shows up as a USB drive named tinypod. 
 
 ## Controls
 
-The menus and Now Playing use these events. Each device maps its buttons to them.
+The menus and Now Playing use these controls. Each device maps its buttons to them.
 
 | Event | Menus | Now Playing |
 |---|---|---|
@@ -226,108 +226,19 @@ err := tinypod.Run(tinypod.Config{
 
 ## How it works
 
-tinypod has two main goroutines. The UI loop reads the input and draws the screen. The deck goroutine plays songs. With ReadAhead a third goroutine reads songs ahead. The arrows show the direction of the data. The device main sets up the boxes on the left and right.
+tinypod consists of four main subsystems:
 
-```mermaid
-flowchart LR
-    subgraph devin [Device inputs]
-        VOL[Volume<br/>MountSD or MountFlash]
-        INP[Input<br/>Buttons, HoldButton, Gamepad]
-    end
+- Display
+Display shows what is going on to the user of the tinypod.
 
-    subgraph storage [Storage]
-        FAT[soypat/fat]
-        LIB[library.go<br/>scan]
-        AHEAD[ahead.go<br/>32 KB ring buffer<br/>if ReadAhead]
-    end
+- Input
+Input reads whatever buttons are connected so that the user can operate the tinypod.
 
-    subgraph ui [UI loop]
-        UIL[ui.go<br/>menus and Now Playing]
-        SCR[display.go<br/>rows, skips rows that did not change]
-    end
+- Library
+Library provides access to the actual music on the tinypod. It uses the Storage interface to be able to find albums anbd songs on SD card or flash memory.
 
-    subgraph play [Deck goroutine]
-        DECK[deck.go<br/>song queue]
-        PLAYER[tinyplayer.Player<br/>wav.Decoder]
-    end
-
-    VOL --> FAT
-    FAT --> LIB
-    FAT -- file data --> AHEAD
-    AHEAD -- file data --> DECK
-    FAT -. without ReadAhead .-> DECK
-    VOL -. USB copy done .-> UIL
-
-    INP -- events --> UIL
-    LIB -- albums and songs --> UIL
-    UIL -- play, skip, pause --> DECK
-    DECK -- song, progress --> UIL
-
-    subgraph devout [Device outputs]
-        DISP[Display<br/>SSD1306, ST7789, ...]
-        OUT[Output<br/>I2S or PWM]
-    end
-
-    UIL --> SCR --> DISP
-    DECK --> PLAYER --> OUT
-```
-
-### Start
-
-The device main sets up the display, the audio output, the volume and the input. `Run` scans the songs, starts the deck goroutine and runs the UI loop.
-
-### Storage
-
-`MountSD` uses the `sd` package from [tinygo.org/x/drivers](https://github.com/tinygo-org/drivers). The card starts at 400 kHz, because the SD specification requires a slow clock during setup. Then the device raises the SPI clock. `sd.SPICard` has the block methods that [github.com/soypat/fat](https://github.com/soypat/fat) needs, so the FAT volume mounts on it with no adapter.
-
-`MountFlash` uses the tinyplayer `storage.Mount` on a tinyplayer `flashdisk.Disk`. The UI loop watches the disk change counter. When the USB host stops writing for one second, tinypod stops the deck, writes the flash cache, mounts the volume again and scans the songs.
-
-### Music library
-
-`library.go` reads the folders and keeps a list of albums and a sorted list of all songs. Each song is a full path on the volume.
-
-### Playback
-
-`deck.go` plays a queue of songs in its own goroutine. It opens each file and gives it to `tinyplayer.Player`, which decodes the WAV data and writes it to the output. When a song ends, the deck plays the next one.
-
-The UI asks for a new song with `play` or `skip`. These set the next position and a cut flag, then call `Player.Stop`. The deck reads the file through its own `Read` method, which returns end of file when the cut flag is set. Thus a song always ends when you ask, even if `Stop` comes before `Play` starts. Pause uses `Player.Pause`, and the time bar uses `Player.Progress`.
-
-### Read ahead
-
-With ReadAhead, `ahead.go` reads each song into a 32 KB ring buffer in a separate goroutine, and the player decodes from this buffer. The ESP32-C3 I2S output holds only about 9 ms of audio at 44.1 kHz, and SD reads and screen updates can take longer. The buffer holds about 190 ms, so these delays do not stop the audio.
-
-Leave ReadAhead off with piolib I2S on the RP2040 and RP2350. piolib I2S starts one DMA buffer at a time, and SPI transfers in the read ahead goroutine do not yield. The next audio buffer then starts late and the audio clicks.
-
-### Screen
-
-`display.go` splits the screen into rows. Row 0 is the title bar, and the other rows have the height of the font. `ui.go` keeps a stack of menus and draws the top one, or the Now Playing screen.
-
-Each row has a key, made from what it shows. A row is drawn again only when its key changes, and then its background is filled before the text. Thus on Now Playing only the time bar and the time change each second. This matters on displays like the ST7789, where each pixel is a separate SPI write. On buffered displays like the SSD1306, `Display` sends the frame only if a row changed.
-
-The UI loop runs every 30 ms. It reads the input and draws only when something changes.
-
-On the ESP32-C3 an I2C write holds the CPU until it is done. A full SSD1306 frame is 1 KB and takes about 30 ms at 400 kHz. `tinypod.NewSSD1306` sends the frame in 32 byte pieces and yields after each piece, so audio playback can continue.
-
-### Input
-
-`Buttons` reads each button every 30 ms. A button with Hold fires Press on a short press and Hold after 500 ms. A button with Repeat fires again after 400 ms and then every 120 ms. `Gamepad` reads the seesaw chip on the Gamepad QT, the buttons as one 32 bit value and the joystick from two ADC channels.
-
-## Files
-
-| File | What it does |
-|---|---|
-| `tinypod.go` | `Config`, `Run`, `Fail` |
-| `display.go` | `Display`, `Theme`, rows and `Message` |
-| `ssd1306.go` | SSD1306 that sends the frame in pieces |
-| `ui.go` | Menus and Now Playing |
-| `input.go` | `Buttons`, `HoldButton`, `Gamepad`, `Inputs` |
-| `storage.go` | `MountSD`, `MountFlash` and the USB copy watch |
-| `library.go` | Album and song scan |
-| `deck.go` | Playback goroutine and song queue |
-| `ahead.go` | Read ahead ring buffer |
-| `devices/xiao-expansion`, `devices/pico2-ssd1306`, `devices/gopher-badge` | Device mains |
-
-`make test` runs the tests on your computer, with a FAT volume in memory and a fake display. `make smoketest` builds every device with TinyGo.
+- Deck
+Deck is what actually plays back the music so the user can hear it.
 
 ## Known issues
 

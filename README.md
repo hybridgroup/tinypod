@@ -122,30 +122,48 @@ tinypod looks for the gamepad only at start. To change from one input to the oth
 
 ## pico2-ssd1306
 
-A Pico 2 with an SSD1306 OLED, four buttons and an I2S DAC.
+A Pico 2 with an SSD1306 OLED, four buttons and an I2S DAC. Songs are in flash, which shows up as a USB drive. Power and flashing use the Pico 2 USB port.
 
 Parts:
 
 - Raspberry Pi Pico 2
 - SSD1306 128x64 I2C OLED at address 0x3C
 - 4 push buttons
-- An I2S DAC such as the Adafruit PCM5102
+- An I2S DAC such as the Adafruit PCM5102, with headphones or a powered speaker
 
-| Part | Pin | Pico 2 |
+The physical pin is the Pico 2 header pin. Pin 1 is next to the USB port on the left side.
+
+OLED on I2C1:
+
+| OLED pin | Pico 2 | Physical pin |
 |---|---|---|
-| OLED | SDA | GPIO6 |
-| OLED | SCL | GPIO7 |
-| OLED | VCC, GND | 3V3, GND |
-| DAC | DIN | GPIO2 |
-| DAC | BCK | GPIO3 |
-| DAC | WSEL (LCK) | GPIO4 |
-| DAC | VIN, GND | 3V3, GND |
-| Up button | | GPIO10 |
-| Down button | | GPIO11 |
-| Select button | | GPIO12 |
-| Back button | | GPIO13 |
+| VCC | 3V3(OUT) | 36 |
+| GND | GND | 8 |
+| SDA | GPIO6 | 9 |
+| SCL | GPIO7 | 10 |
 
-Connect the other side of each button to GND. The pins use the internal pull up.
+Most OLED modules have pull up resistors for I2C. If yours uses address 0x3D, change the address in `NewSSD1306` in `main.go`.
+
+DAC:
+
+| DAC pin | Pico 2 | Physical pin |
+|---|---|---|
+| VIN | 3V3(OUT) | 36 |
+| GND | GND | 3 |
+| DIN | GPIO2 | 4 |
+| BCK | GPIO3 | 5 |
+| WSEL (LCK) | GPIO4 | 6 |
+
+WSEL must be the pin after BCK, because of how the PIO I2S program works. If your DAC board has more pins than the Adafruit one, connect SCK to GND, XSMT to 3V3, and FMT, FLT and DEMP to GND. See [AUDIO.md](../../AUDIO.md).
+
+Buttons. Connect one leg of each button to its pin and the other leg to GND. The pins use the internal pull up, so no resistors are necessary.
+
+| Button | Pico 2 | Physical pin | GND near it |
+|---|---|---|---|
+| Up | GPIO10 | 14 | 13 |
+| Down | GPIO11 | 15 | 13 or 18 |
+| Select | GPIO12 | 16 | 18 |
+| Back | GPIO13 | 17 | 18 |
 
 | Button | Press | Hold 0.5 seconds |
 |---|---|---|
@@ -153,6 +171,10 @@ Connect the other side of each button to GND. The pins use the internal pull up.
 | Down | Down, repeats while held | |
 | Select | Select | PlayPause |
 | Back | Back | Next |
+
+The I2C pins are not the default GPIO4 and GPIO5, because GPIO4 is the I2S WSEL pin.
+
+If the computer does not see the Pico 2 at all, hold BOOTSEL while you plug in the USB cable. A drive named RP2350 shows up and `tinygo flash` can write to it.
 
 ## gopher-badge
 

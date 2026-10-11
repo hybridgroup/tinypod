@@ -102,8 +102,7 @@ Deck is what actually plays back the music so the user can hear it. See `deck.go
 ## Known issues
 
 - tinypod on an SD card needs the `sd` fix in [tinygo-org/drivers#905](https://github.com/tinygo-org/drivers/pull/905). Without it, the SD card does not mount.
-- On the RP2350 with piolib I2S and SPI it needs [tinygo-org/pio#65](https://github.com/tinygo-org/pio/pull/65). Without it, piolib I2S and SPI0 use the same DMA channel, and the board stops when a song starts.
-- `go.mod` uses the branches of these two PRs until they are merged.
+- `go.mod` uses the branch of this PR until it is merged.
 - The `sd` package reads several blocks at a time correctly only on SDHC cards. Do not use cards of 2 GB or less.
 - Cards of 64 GB or more usually come formatted as exFAT. Format them as FAT32.
 - The ColorTheme font is Noto Sans from tinyfont, under the SIL Open Font License.
